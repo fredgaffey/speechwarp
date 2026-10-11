@@ -41,12 +41,16 @@ void main() {
         'system: ${voices.where((v) => v.engine == 'apple' || v.engine == 'android').take(5).toList()}');
   });
 
-  bool isSystem(VoiceInfo v) => (v.engine == 'apple' || v.engine == 'android') && v.isInstalled;
+  // Installed and on the device: Android lists network voices too, which never answer on a machine with no Google
+  // services account, such as CI.
+  bool isSystem(VoiceInfo v) =>
+      (v.engine == 'apple' || v.engine == 'android') && v.isInstalled && !v.id.contains('network');
+  bool isEnglish(VoiceInfo v) => v.language.toLowerCase().startsWith('en');
 
   // An English system voice, or any; null on a device with no text-to-speech engine (some emulator images).
   VoiceInfo? systemVoice() {
     final system = voices.where(isSystem);
-    return system.where((v) => v.language.toLowerCase().startsWith('en')).firstOrNull ?? system.firstOrNull;
+    return system.where(isEnglish).firstOrNull ?? system.firstOrNull;
   }
 
   testWidgets('the system voice reads the text aloud and the position follows it', (tester) async {
@@ -84,9 +88,11 @@ void main() {
   });
 
   testWidgets('the voice can change while reading', (tester) async {
-    final system = voices.where(isSystem).toList();
-    if (system.isEmpty) {
-      markTestSkipped('no system voice on this device');
+    // Two English voices when there are, as a voice in another language may need data the device lacks.
+    final english = voices.where((v) => isSystem(v) && isEnglish(v)).toList();
+    final system = english.length >= 2 ? english : voices.where(isSystem).toList();
+    if (system.length < 2) {
+      markTestSkipped('fewer than two system voices on this device');
       return;
     }
     final reader = await VoiceReader.create(text, voiceId: system.first.id, options: const ReaderOptions(speed: 2));

@@ -126,6 +126,7 @@ jobs:
   # app, which reads aloud with the system's voices and eSpeak NG and plays through the platform. Nothing is published.
   flutter-voice-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - name: Fetch eSpeak NG
@@ -165,10 +166,11 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot
           working-directory: bindings/flutter_voice/speechwarp_voice/example
-          script: flutter test integration_test -d emulator-5554
+          script: flutter test integration_test -d emulator-5554 --timeout 5m
 
   flutter-voice-ios:
     runs-on: macos-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -184,13 +186,18 @@ jobs:
         run: flutter build ios --simulator --debug
       - name: The integration test on a simulator
         working-directory: bindings/flutter_voice/speechwarp_voice/example
+        # One of the runner's own iPhone simulators, on its newest iOS: a freshly created one never finished
+        # starting its system apps on the runner, and the test then waited for the app until the job was cancelled.
+        timeout-minutes: 30
         run: |
-          runtime=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; print([r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS" and r["isAvailable"]][-1])')
-          device=$(xcrun simctl create speechwarp-flutter com.apple.CoreSimulator.SimDeviceType.iPhone-16 "$runtime" 2>/dev/null ||
-                   xcrun simctl create speechwarp-flutter "$(xcrun simctl list devicetypes -j | python3 -c 'import json,sys; print([d["identifier"] for d in json.load(sys.stdin)["devicetypes"] if "iPhone" in d["name"]][-1])')" "$runtime")
-          xcrun simctl boot "$device"
+          device=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          ios = sorted((k for k in devices if ".iOS-" in k), key=lambda k: [int(x) for x in k.split(".iOS-")[1].split("-")])
+          print([d["udid"] for d in devices[ios[-1]] if d["name"].startswith("iPhone")][0])')
+          xcrun simctl boot "$device" || true
           xcrun simctl bootstatus "$device" -b
-          flutter test integration_test -d "$device"
+          flutter test integration_test -d "$device" --timeout 5m
 
   react-native:
     runs-on: ubuntu-latest
