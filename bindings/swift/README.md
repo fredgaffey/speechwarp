@@ -138,8 +138,8 @@ The `SpeechwarpVoice` product reads text aloud, sped up by speechwarp. `VoicedTe
 - it reports the character being heard;
 - with `Options.cacheDirectory` set, a slow voice's audio is kept in a `VoiceCache`.
 
-Engines: `AppleSentenceVoice` (Apple's voices, Eloquence among them), and `EspeakSentenceVoice` in the optional
-`SpeechwarpVoiceEspeak` product.
+Engines: `AppleSentenceVoice` (Apple's voices, Eloquence among them), `KokoroSentenceVoice` in the optional
+`SpeechwarpVoiceKokoro` product, and `EspeakSentenceVoice` in the optional `SpeechwarpVoiceEspeak` product.
 
 ```swift
 import SpeechwarpVoice
@@ -159,10 +159,43 @@ git submodule update --init --checkout third_party/espeak-ng
 bindings/dotnet/Speechwarp.Voice.Espeak/native-build/build-espeak.sh swift
 ```
 
+### Kokoro
+
+`SpeechwarpVoiceKokoro` runs [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), a neural voice, on ONNX
+Runtime's CPU (iOS and macOS), as the C# package `Speechwarp.Voice.Kokoro` does. ONNX Runtime comes from Microsoft's
+Swift package, and only with this package's trait `Kokoro` (Swift 6.1, Xcode 16.3 or later), so that nobody else
+downloads it:
+
+```swift
+.package(url: "https://github.com/fredgaffey/speechwarp", from: "0.3.8", traits: ["Kokoro"]),
+```
+
+In an Xcode project, turn the trait on in the package's row of the project's Package Dependencies. Without the trait
+the product has only `KokoroModels`, the catalogue of files to download.
+
+```swift
+import SpeechwarpVoiceKokoro
+
+// The app downloads what KokoroModels.missingFiles(directory, voice: "af_heart") lists and checks the SHA-256.
+let voice = try KokoroSentenceVoice(directory: directory, voice: "af_heart", phonemizer: phonemizer)
+let book = try VoicedText(text, voice: voice)
+```
+
+It needs a `Phonemizer` for text to IPA: `EspeakPhonemizer` from `SpeechwarpVoiceEspeak` (GPL-3.0), or one of your
+own. `KokoroEngine` can be shared between voices; `speakPhonemes` takes IPA directly.
+
 See [Voices](../../docs/voices.md).
 
 ## Testing it here
 
 ```sh
 swift test
+```
+
+Kokoro's engine needs the trait, and its model tests a model directory (they are skipped without one); the phonemizer
+tests use Homebrew's `espeak-ng`, and the hear-back test SpeechwarpListen and a whisper.cpp model:
+
+```sh
+SPEECHWARP_KOKORO_DIR=/path/to/kokoro SPEECHWARP_LISTEN_MODEL=/path/to/ggml-tiny.en.bin \
+    swift test --traits Kokoro --filter SpeechwarpVoiceKokoroTests
 ```

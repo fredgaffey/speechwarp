@@ -21,6 +21,11 @@ jobs:
       - uses: actions/checkout@v7
       - name: Test
         run: swift test
+      # Kokoro's engine is behind the package trait "Kokoro", which fetches ONNX Runtime (iOS and macOS only). Without a
+      # model (SPEECHWARP_KOKORO_DIR) the tests that run it are skipped; this checks that it builds and the rest pass.
+      - name: Test Kokoro
+        if: runner.os == 'macOS'
+        run: swift test --traits Kokoro --filter SpeechwarpVoiceKokoroTests
 
   ios:
     name: build for iOS

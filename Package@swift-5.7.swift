@@ -1,0 +1,123 @@
+// swift-tools-version:5.7
+// The Swift package for toolchains older than Swift 6.1 (Xcode 16.3), which cannot read Package.swift's package
+// traits. Newer toolchains read Package.swift instead. It is Package.swift without the Kokoro product (which needs a
+// trait, so that nobody else fetches ONNX Runtime); keep the rest the same as Package.swift.
+import Foundation
+import PackageDescription
+
+let package = Package(
+    name: "Speechwarp",
+    platforms: [.macOS(.v10_15), .iOS(.v13), .tvOS(.v13), .watchOS(.v6)],
+    products: [
+        .library(name: "Speechwarp", targets: ["Speechwarp"]),
+        // Optional: text read aloud by Apple's voices (Eloquence and the rest), sped up by speechwarp.
+        .library(name: "SpeechwarpVoice", targets: ["SpeechwarpVoice"]),
+    ],
+    targets: [
+        .target(
+            name: "CSpeechwarp",
+            path: ".",
+            // Everything here that is not this target's. Without it Swift Package Manager takes the example
+            // apps of the other bindings for resources of this one.
+            exclude: [
+                "bindings", "examples", "tests", "tools", "docs", "cmake", "third_party", "listen",
+                "CMakeLists.txt", "Cargo.toml", "go.mod", "pyproject.toml", "setup.py", "MANIFEST.in",
+                "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "NOTICE",
+                "src/internal.h", "src/rename.h", "src/fft.h",
+            ],
+            sources: [
+                "src/speechwarp.c",
+                "src/fft.c",
+                "src/trainer.c",
+                "src/third_party_kissfft.c",
+                "src/third_party_sonic.c",
+                "src/third_party_speedy.c",
+            ],
+            publicHeadersPath: "include",
+            cSettings: [
+                .headerSearchPath("third_party/kissfft"),
+                // Upstream is full of assertions.
+                .define("NDEBUG"),
+            ]
+        ),
+        .target(
+            name: "Speechwarp",
+            dependencies: ["CSpeechwarp"],
+            path: "bindings/swift/Sources/Speechwarp"
+        ),
+        .target(
+            name: "SpeechwarpVoice",
+            dependencies: ["Speechwarp"],
+            path: "bindings/swift/Sources/SpeechwarpVoice"
+        ),
+        .testTarget(
+            name: "SpeechwarpVoiceTests",
+            dependencies: ["SpeechwarpVoice"],
+            path: "bindings/swift/Tests/SpeechwarpVoiceTests"
+        ),
+        .testTarget(
+            name: "SpeechwarpTests",
+            dependencies: ["Speechwarp"],
+            path: "bindings/swift/Tests/SpeechwarpTests"
+        ),
+    ]
+)
+
+// Optional: speech to text with whisper.cpp (SpeechwarpListen). whisper.cpp is a submodule that is not fetched by
+// default and needs CMake's per-architecture settings, so its library is a binary framework that
+// bindings/swift/build-listen-xcframework.sh builds. The product exists only once it has been built: a target whose
+// files are missing would break the whole package. Swift Package Manager caches this file's result, so run
+// `swift package purge-cache` after building or deleting the framework. See bindings/swift/README.md.
+let listenFramework = "bindings/swift/Frameworks/speechwarp_listen.xcframework"
+if FileManager.default.fileExists(atPath: Context.packageDirectory + "/" + listenFramework) {
+    package.products.append(.library(name: "SpeechwarpListen", targets: ["SpeechwarpListen"]))
+    package.targets += [
+        .binaryTarget(name: "speechwarp_listen", path: listenFramework),
+        .target(
+            name: "SpeechwarpListen",
+            dependencies: [
+                "Speechwarp",
+                .target(name: "speechwarp_listen", condition: .when(platforms: [.macOS, .iOS])),
+            ],
+            path: "bindings/swift/Sources/SpeechwarpListen"
+        ),
+        .testTarget(
+            name: "SpeechwarpListenTests",
+            dependencies: ["SpeechwarpListen"],
+            path: "bindings/swift/Tests/SpeechwarpListenTests"
+        ),
+    ]
+}
+
+// Optional: eSpeak NG's voices and phonemes (SpeechwarpVoiceEspeak). LICENSED UNDER THE GPL-3.0-OR-LATER, unlike the
+// rest of this package: an app that uses this product must be distributed under the GPL-3.0 too. eSpeak NG is a
+// submodule that is not fetched by default; its library is a binary framework, and its data a resource folder, that
+// `bindings/dotnet/Speechwarp.Voice.Espeak/native-build/build-espeak.sh swift` builds. As with SpeechwarpListen, the
+// product exists only once they have been built (then run `swift package purge-cache`).
+let espeakFramework = "bindings/swift/Frameworks/espeak_ng.xcframework"
+let espeakData = "bindings/swift/Sources/SpeechwarpVoiceEspeak/espeak-ng-data"
+if FileManager.default.fileExists(atPath: Context.packageDirectory + "/" + espeakFramework),
+   FileManager.default.fileExists(atPath: Context.packageDirectory + "/" + espeakData) {
+    package.products.append(.library(name: "SpeechwarpVoiceEspeak", targets: ["SpeechwarpVoiceEspeak"]))
+    package.targets += [
+        .binaryTarget(name: "espeak_ng", path: espeakFramework),
+        .target(
+            name: "SpeechwarpVoiceEspeak",
+            dependencies: [
+                "SpeechwarpVoice",
+                .target(name: "espeak_ng", condition: .when(platforms: [.macOS, .iOS])),
+            ],
+            path: "bindings/swift/Sources/SpeechwarpVoiceEspeak",
+            resources: [.copy("espeak-ng-data")]
+        ),
+        .testTarget(
+            name: "SpeechwarpVoiceEspeakTests",
+            dependencies: ["SpeechwarpVoiceEspeak"],
+            path: "bindings/swift/Tests/SpeechwarpVoiceEspeakTests"
+        ),
+    ]
+}
+
+// Kokoro on the GPU (MLX) is a separate Swift package, bindings/swift/KokoroGPU, which builds the framework that the
+// Speechwarp.Voice.Kokoro.Gpu NuGet package carries. It is not a product here: it would make every user of this package
+// fetch MLX. Swift apps can use mlalma/kokoro-ios directly, behind a SentenceVoice of their own.
