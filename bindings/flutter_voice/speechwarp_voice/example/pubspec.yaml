@@ -1,0 +1,29 @@
+name: speechwarp_voice_example
+description: "Reads text aloud with speechwarp_voice: any voice, any speed, the sentence being heard highlighted."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  speechwarp_voice:
+    path: ../
+  # Kokoro (Apache-2.0, brings ONNX Runtime) and eSpeak NG (GPL-3.0-or-later): both optional. An app built with
+  # speechwarp_voice_espeak is a GPL-3.0 app; this example is source only.
+  speechwarp_voice_kokoro:
+    path: ../../speechwarp_voice_kokoro
+  speechwarp_voice_espeak:
+    path: ../../speechwarp_voice_espeak
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

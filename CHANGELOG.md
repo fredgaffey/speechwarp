@@ -30,6 +30,17 @@
     Runtime's CPU, API 24+; the fp32 model by default, the fastest and NaN-free on an arm64 emulator) and
     `io.github.fredgaffey:speechwarp-voice-espeak` (eSpeak NG 1.52.0 built with the NDK for four ABIs, English
     data in the AAR; **GPL-3.0-or-later**).
+  - New React Native packages (New Architecture, iOS and Android), over the native libraries:
+    `react-native-speechwarp-voice` (the reader, played natively with AVAudioEngine or AudioTrack, Apple's or
+    Android's voices, state events with the character being heard, seeking, speed, voice changes),
+    `react-native-speechwarp-voice-espeak` (**GPL-3.0-or-later**) and `react-native-speechwarp-voice-kokoro` (the
+    catalogue of its files; on iOS its engine only with `SPEECHWARP_KOKORO=1`). In `bindings/react-native-voice`.
+  - New Flutter plugins (iOS and Android), over the native libraries: `speechwarp_voice` (`VoiceReader`: the
+    reader, played natively with AVAudioEngine or AudioTrack, Apple's or Android's voices, a stream of positions
+    with the character and sentence being heard, seeking, speed and the other speed-up settings, voice changes;
+    `listVoices`), `speechwarp_voice_kokoro` (Kokoro voices, and the catalogue of its files) and
+    `speechwarp_voice_espeak` (**GPL-3.0-or-later**: eSpeak NG voices, and the phonemizer for Kokoro). In
+    `bindings/flutter_voice`. Swift Package Manager on iOS (no CocoaPods), Flutter 3.44.2 or later.
   - **The eSpeak packages are GPL-3.0-or-later**, unlike everything else here.
   - See [Voices](docs/voices.md).
 

@@ -45,8 +45,8 @@ node -e '
 ' "$new"
 
 # Changelogs: an "Unreleased" section becomes this release; otherwise a heading is added to fill in. pub.dev
-# shows the Flutter one, so it must have an entry for every version.
-for log in CHANGELOG.md bindings/flutter/CHANGELOG.md; do
+# shows the Flutter ones, so each must have an entry for every version.
+for log in CHANGELOG.md bindings/flutter/CHANGELOG.md bindings/flutter_voice/*/CHANGELOG.md; do
   if grep -q '^## Unreleased' "$log"; then
     sed -i.bak "s/^## Unreleased.*/## $new/" "$log"
   elif [ "$log" = CHANGELOG.md ]; then

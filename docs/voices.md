@@ -12,6 +12,9 @@ voices' audio on disk, and knows which character is being spoken.
 | **eSpeak NG** | `Speechwarp.Voice.Espeak` (Android: `speechwarp-voice-espeak`) | `SpeechwarpVoiceEspeak` | **GPL-3.0-or-later** | far faster than listening | formant voices; also the phonemizer for Kokoro |
 | **Android's voices** (the system's text-to-speech) | - (Android: `speechwarp-voice`) | - | Apache-2.0 | far faster than listening | built in; see [On Android](#on-android) |
 
+React Native apps get all of these but Kokoro on the GPU through the packages in [React Native](#react-native), and
+Flutter apps through those in [Flutter](#flutter).
+
 All the C# packages are for iOS 16 and later (`net10.0-ios`). They are published from the release after 0.3.7;
 until then build them from this repository.
 
@@ -291,6 +294,92 @@ takes turns on one eSpeak.
 
 Read the licence note at the top of this page before using it. The Android library is described under
 [Kokoro and eSpeak on Android](#kokoro-and-espeak-on-android).
+
+## React Native
+
+Three npm packages, in `bindings/react-native-voice`, put the reader in a React Native app on iOS and Android. They wrap
+the native libraries above rather than reimplement them, and need the New Architecture.
+
+| Package | What | Licence |
+|---|---|---|
+| `react-native-speechwarp-voice` | the reader, played natively, with Apple's or Android's voices and the cache | Apache-2.0 |
+| `react-native-speechwarp-voice-espeak` | eSpeak NG's voices and its phonemizer | **GPL-3.0-or-later** |
+| `react-native-speechwarp-voice-kokoro` | Kokoro, and the catalogue of its files | Apache-2.0 |
+
+The engines are separate packages so that an app takes on eSpeak's GPL, or ONNX Runtime's size, only by installing
+them. Installed, their voices simply appear in `listVoices()`. Kokoro needs a phonemizer, and the only one shipped is
+eSpeak's, so Kokoro in practice comes with the GPL package.
+
+```ts
+import { chooseVoice, createReader, listVoices } from 'react-native-speechwarp-voice';
+
+const voice = chooseVoice(await listVoices(), 'en');
+const reader = await createReader(text, voice!.id, { speed: 2 });
+reader.addListener('state', ({ character, sentence, waiting }) => highlight(reader.sentences[sentence]));
+reader.play();
+reader.setVoice('espeak:en-gb');            // from the next sentence not yet started
+```
+
+- The audio never crosses to JavaScript: the native side speaks ahead, speeds up and plays (AVAudioEngine on iOS,
+  AudioTrack on Android), and sends state events (character, sentence, time on the timeline, waiting, playing,
+  finished) for what is being heard.
+- `play`, `pause`, `seek(character)`, `seekToTime`, `setSpeed`, `setVoice(id)`, `configure` (speechwarp's other
+  settings), `release`.
+- Kokoro: `kokoro.catalogue()`, `missingFiles(voice)`, `isInstalled(voice)`, `directory()`; the app downloads the files.
+  On iOS its engine is compiled only with `SPEECHWARP_KOKORO=1` and `pod 'onnxruntime-objc', :modular_headers => true`
+  in the Podfile.
+- Android uses the Maven artifacts of the same version. iOS compiles the Swift package's sources, copied into the npm
+  packages when they are packed, through CocoaPods (React Native's Swift Package Manager support needs every app to
+  use frameworks, and eSpeak's framework and Kokoro's trait are not in the git checkout as usable products).
+
+See the [package's README](../bindings/react-native-voice/README.md). Run on an arm64 Android emulator and the iOS
+simulator (all three engines); not yet on a phone.
+
+## Flutter
+
+Three pub packages, in `bindings/flutter_voice`, put the reader in a Flutter app on iOS and Android. Like the React
+Native ones they wrap the native libraries above (Swift `SpeechwarpVoice`, Kotlin `speechwarp-voice`) rather than
+reimplement them. They are separate from the `speechwarp` package (`bindings/flutter`, the speed-up alone over FFI),
+which stays small.
+
+| Package | What | Licence |
+|---|---|---|
+| `speechwarp_voice` | `VoiceReader`: the reader, played natively, with Apple's or Android's voices and the cache | Apache-2.0 |
+| `speechwarp_voice_kokoro` | Kokoro's voices, and `Kokoro`, the catalogue of its files | Apache-2.0 |
+| `speechwarp_voice_espeak` | eSpeak NG's voices, and the phonemizer for Kokoro | **GPL-3.0-or-later** |
+
+The engine packages carry their native libraries and are found at run time, so an app takes on eSpeak's GPL, or ONNX
+Runtime's size, only by adding them; then their voices appear in `VoiceReader.listVoices()`. Kokoro needs a phonemizer,
+and the only one shipped is eSpeak's. An app that cannot be GPL sets its own from Kotlin or Swift
+(`SpeechwarpVoicePlugin.phonemizer`); Dart has no way to supply one.
+
+```dart
+import 'package:speechwarp_voice/speechwarp_voice.dart';
+
+final voices = await VoiceReader.listVoices();
+final reader = await VoiceReader.create(text, voiceId: voices.first.id, options: const ReaderOptions(speed: 2));
+reader.positions.listen((p) => highlight(reader.sentences[p.sentence]));   // also p.character, p.isWaiting
+await reader.play();
+await reader.setVoice('espeak:en-gb');      // from the next sentence not yet started
+```
+
+- The audio never crosses to Dart: the native side speaks ahead, speeds up and plays (AVAudioEngine on iOS, AudioTrack
+  on Android). An event channel sends the position of what is being heard (character, sentence, time on the timeline,
+  playing, waiting, finished, the last error) about 20 times a second while playing.
+- `play`, `pause`, `seek(character)`, `seekToSentence`, `setSpeed`, `configure(SpeedUpSettings)` (speechwarp's other
+  settings), `setVoice(id)`, `dispose`.
+- Kokoro: `ReaderOptions.kokoroDirectory` (and `kokoroModelFile`); `Kokoro.catalogue()` and `Kokoro.missingFiles()`
+  list what to download, with URLs and SHA-256; the app downloads them.
+- Android depends on the Maven artifacts of the same version. iOS is a Swift Package Manager plugin (no CocoaPods
+  podspec) depending on this repository's Swift package: by path in a checkout, from GitHub at the same version
+  otherwise. Each plugin asks for the trait `Kokoro`, because Swift Package Manager fails to resolve the graph when the
+  first package to depend on speechwarp leaves it off and a later one turns it on; so Xcode downloads ONNX Runtime for
+  every app with `speechwarp_voice`, but links it only with `speechwarp_voice_kokoro`.
+- **eSpeak on iOS works only from a checkout** in which its framework has been built (see below), because the Swift
+  package has no eSpeak product otherwise. Elsewhere the package builds without it and says so; Android is unaffected.
+
+See the [package's README](../bindings/flutter_voice/speechwarp_voice/README.md). Run on an arm64 Android emulator
+(Android 16) and the iOS 26.4 simulator, all three engines; not yet on a phone.
 
 ## Building the native parts
 

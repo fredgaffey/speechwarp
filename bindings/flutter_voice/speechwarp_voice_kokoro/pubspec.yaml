@@ -1,0 +1,28 @@
+name: speechwarp_voice_kokoro
+description: "Kokoro-82M, a neural voice, for speechwarp_voice on iOS and Android (ONNX Runtime on the CPU), with the catalogue of model files to download."
+version: 0.3.7 # keep in step with SPEECHWARP_VERSION in include/speechwarp.h (tools/bump-version.sh sets it)
+homepage: https://github.com/fredgaffey/speechwarp
+repository: https://github.com/fredgaffey/speechwarp
+topics: [text-to-speech, tts, kokoro, speech, onnx]
+
+environment:
+  sdk: ^3.5.0
+  flutter: '>=3.44.2'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: io.github.fredgaffey.speechwarp_voice_kokoro
+        pluginClass: SpeechwarpVoiceKokoroPlugin
+      ios:
+        pluginClass: SpeechwarpVoiceKokoroPlugin
