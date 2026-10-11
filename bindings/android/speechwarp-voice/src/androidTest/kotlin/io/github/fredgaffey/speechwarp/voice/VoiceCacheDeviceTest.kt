@@ -113,6 +113,27 @@ class VoiceCacheDeviceTest {
     }
 
     @Test
+    fun keepsTheEndOfEveryBlockWhateverItsLength() {
+        // Some encoders drop the last partial frame and their delayed samples at the end of the stream (Android 14's
+        // does); none of that may be audio.
+        for (rate in intArrayOf(16000, 24000)) {
+            Log.i("VoiceCacheDeviceTest", "AAC delay at $rate Hz: ${AacCodec.delay(rate, root.apply { mkdirs() })}")
+            for (frames in intArrayOf(1, 500, 1023, 1024, 1025, 3000, 45000)) {
+                val sentence = FloatArray(frames) { i -> (0.5 * sin(2 * PI * 440 * i / rate)).toFloat() }
+                val cache = VoiceCache("Length $frames at $rate.", "test:voice", root)
+                cache.save(0, listOf(sentence, burst(4000, 300.0, rate)), rate)
+                val loaded = cache.load(0, rate)
+                assertNotNull("block of $frames at $rate could not be read back", loaded)
+                assertEquals(frames, loaded!![0].size)
+                assertEquals(4000, loaded[1].size)
+                assertTrue("the last sentence after $frames at $rate is out of place", correlation(burst(4000, 300.0, rate), loaded[1]) > 0.9)
+                // The very end of the audio is there, not silence.
+                assertTrue(rms(loaded[1], 3000, 3600) > 0.05)
+            }
+        }
+    }
+
+    @Test
     fun keepsABlockOfNothing() {
         val cache = VoiceCache("Silence.", "test:voice", root)
         cache.save(2, listOf(FloatArray(0), FloatArray(0)), 24000)

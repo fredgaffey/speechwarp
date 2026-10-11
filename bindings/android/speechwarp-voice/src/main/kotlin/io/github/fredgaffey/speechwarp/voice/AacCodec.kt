@@ -11,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.ByteOrder
 import java.util.UUID
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -21,6 +22,12 @@ import kotlin.math.sqrt
  * (2048 with Android's own encoder; the extractor reports nothing, as MediaMuxer writes no edit list). So that every
  * sentence stays in place, [read] removes them. How many is measured once for each sample rate by encoding and
  * decoding a probe, so an encoder with another delay, or a decoder that removes it itself, is handled too.
+ *
+ * Encoders also differ at the end. Android 14's encoder does not flush at the end of the stream: it keeps only whole
+ * frames that it has finished, so the last partial frame and the priming-delayed samples before it are lost (and
+ * a block shorter than one frame gives a file with no track at all). Android 16's flushes everything. So [write]
+ * adds [PADDING] samples of silence after the audio, rounded up to a whole frame, and the lengths file, which
+ * [VoiceCache] keeps beside the audio, says where each sentence ends; the silence is never read.
  */
 internal object AacCodec : VoiceCache.Codec {
     private const val MIME = MediaFormat.MIMETYPE_AUDIO_AAC
@@ -28,6 +35,8 @@ internal object AacCodec : VoiceCache.Codec {
     private const val FRAME = 1024 // samples in an AAC-LC frame
     private const val TIMEOUT_US = 10_000L
     private const val DEFAULT_DELAY = 2048
+    // Silence after the audio, so that an encoder that drops its last frames or its delayed samples drops only this.
+    private const val PADDING = 8192
 
     // The sample rates AAC defines; audio at another rate is kept at the next one up (or 48 kHz).
     private val rates = intArrayOf(8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000)
@@ -39,8 +48,8 @@ internal object AacCodec : VoiceCache.Codec {
     override fun write(file: File, samples: FloatArray, sampleRate: Int) {
         require(sampleRate in rates) { "AAC has no sample rate $sampleRate" }
         val rate = sampleRate
-        // A muxer with no samples cannot be stopped: an empty block holds one frame of silence (its lengths say 0).
-        val pcm = if (samples.isEmpty()) FloatArray(FRAME) else samples
+        // Whole frames, then silence: see PADDING. (It also means a muxer is never left with no samples.)
+        val pcm = samples.copyOf((samples.size + FRAME - 1) / FRAME * FRAME + PADDING)
 
         val format = MediaFormat.createAudioFormat(MIME, rate, 1).apply {
             setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
@@ -226,20 +235,23 @@ internal object AacCodec : VoiceCache.Codec {
     private val delays = HashMap<Int, Int>()
 
     /** The priming samples the encoder adds and the decoder keeps, at [rate]; measured the first time. */
-    private fun delay(rate: Int, folder: File?): Int = synchronized(delays) {
+    internal fun delay(rate: Int, folder: File?): Int = synchronized(delays) {
         delays.getOrPut(rate) { measureDelay(rate, folder) }
     }
 
-    /** Encodes and decodes a burst of noise and finds where it comes back; 2048 (Android's encoder) if that fails. */
+    /** Encodes and decodes a sweep and finds where it comes back; 2048 (Android's encoder) if that fails. */
     private fun measureDelay(rate: Int, folder: File?): Int {
         val probe = File(folder, "aac-delay-probe-${UUID.randomUUID()}.m4a")
         return try {
-            val random = java.util.Random(1)
-            val signal = FloatArray(8192) { if (it in 2048 until 6144) random.nextFloat() - 0.5f else 0f }
+            // A sweep from 200 Hz to 2 kHz: AAC keeps it well even at 32 kbit/s, and it matches itself at one lag only.
+            val signal = FloatArray(8192) {
+                val t = (it - 2048).toDouble() / rate
+                if (it in 2048 until 6144) (0.5 * sin(2 * Math.PI * (200 * t + 0.5 * 1800 * rate / 4096.0 * t * t))).toFloat() else 0f
+            }
             write(probe, signal, rate)
             val back = readRaw(probe).samples
             var best = DEFAULT_DELAY
-            var bestScore = 0.5
+            var bestScore = 0.9 // a clear match or none: the default then
             for (lag in 0..4096) {
                 var ab = 0.0
                 var aa = 0.0

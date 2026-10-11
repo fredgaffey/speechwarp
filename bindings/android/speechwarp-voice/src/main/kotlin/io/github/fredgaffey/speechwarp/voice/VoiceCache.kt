@@ -67,6 +67,9 @@ class VoiceCache internal constructor(text: String, val voiceId: String, root: F
         return try {
             val lengths = parseLengths(lengthsFile(block).readText())
             val all = codec.read(audioFile(block))
+            // Less audio than the lengths say: the codec lost some of it, so every sentence after the loss would be
+            // cut short. It is spoken again instead.
+            if (all.samples.size < lengths.sum()) throw IOException("Block $block decoded short: ${all.samples.size} of ${lengths.sum()} samples")
             var at = 0
             Array(lengths.size) { i ->
                 val take = lengths[i].coerceIn(0, all.samples.size - at)
