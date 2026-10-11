@@ -27,7 +27,7 @@ public interface ISentenceVoice : IDisposable
 
     /// <summary>
     /// The engine is slower than listening (neural voices on a phone): what it speaks is worth keeping on disk
-    /// (<see cref="VoiceCache"/>) and speaking far ahead.
+    /// (VoiceCache) and speaking far ahead.
     /// </summary>
     bool KeepsSpoken => false;
 }
