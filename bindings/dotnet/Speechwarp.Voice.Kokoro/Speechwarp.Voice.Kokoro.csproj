@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- iOS only for now, because the shared interfaces (ISentenceVoice, IPhonemizer) are in Speechwarp.Voice, which
+         is iOS only. Nothing here is Apple-specific: the tests build the same sources for the desktop. -->
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <PackageId>Speechwarp.Voice.Kokoro</PackageId>
+    <!-- Keep in step with SPEECHWARP_VERSION in include/speechwarp.h (tools/bump-version.sh does). -->
+    <Version>0.3.7</Version>
+    <Authors>The speechwarp contributors</Authors>
+    <Description>Kokoro-82M neural text-to-speech on ONNX Runtime (CPU or Core ML), as an ISentenceVoice for Speechwarp.Voice's live reader and voice cache, with a pluggable phonemizer (Speechwarp.Voice.Espeak supplies one), a catalogue of the model and voice files to download with their hashes, and a benchmark. For iOS. The app downloads the model. Not an official Kokoro, hexgrad or Microsoft product.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/fredgaffey/speechwarp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/fredgaffey/speechwarp</RepositoryUrl>
+    <PackageTags>speech;tts;text-to-speech;kokoro;onnx;neural;audiobook;ios;offline</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Speechwarp.Voice\Speechwarp.Voice.csproj" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <None Include="..\..\..\LICENSE;..\..\..\NOTICE" Pack="true" PackagePath="licenses" />
+  </ItemGroup>
+
+</Project>

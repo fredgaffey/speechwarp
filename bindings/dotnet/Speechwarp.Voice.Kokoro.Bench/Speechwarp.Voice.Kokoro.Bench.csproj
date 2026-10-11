@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A sample: how fast Kokoro speaks on this machine. Speechwarp.Voice.Kokoro targets iOS (its interfaces are in
+       the iOS-only Speechwarp.Voice), so the desktop build compiles the same sources directly. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Speechwarp.Voice\SentenceVoice.cs" Link="Shared\SentenceVoice.cs" />
+    <Compile Include="..\Speechwarp.Voice.Kokoro\*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
+  </ItemGroup>
+
+</Project>

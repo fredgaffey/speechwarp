@@ -1,0 +1,24 @@
+<Project Sdk="MSTest.Sdk/4.4.0">
+
+  <!-- Speechwarp.Voice.Kokoro targets iOS (its interfaces are in the iOS-only Speechwarp.Voice); nothing in it is
+       Apple-specific, so the tests compile the same sources for the desktop and run them here. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Speechwarp.Voice\SentenceVoice.cs" Link="Shared\SentenceVoice.cs" />
+    <Compile Include="..\Speechwarp.Voice.Kokoro\*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\Speechwarp.Voice.Kokoro.Bench\EspeakCommandPhonemizer.cs" Link="Shared\EspeakCommandPhonemizer.cs" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
+    <!-- Whisper hears what Kokoro said, when SPEECHWARP_LISTEN_MODEL names a model. A project reference does not carry
+         the package's runtimes folder, so put this machine's native library beside the tests (../build-listen-native.sh). -->
+    <ProjectReference Include="..\Speechwarp.Listen\Speechwarp.Listen.csproj" />
+    <None Include="..\Speechwarp.Listen\runtimes\$(NETCoreSdkRuntimeIdentifier)\native\*"
+          CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
