@@ -57,26 +57,42 @@ platforms it supports.
 | Java (desktop) | [Maven Central](https://central.sonatype.com/artifact/io.github.fredgaffey/speechwarp) | `implementation("io.github.fredgaffey:speechwarp:0.3.7")` |
 | Swift | Swift Package Manager | `.package(url: "https://github.com/fredgaffey/speechwarp", from: "0.3.7")`, product `Speechwarp` |
 | C | source | build with CMake, below |
+| C# voices (iOS) | [NuGet](https://www.nuget.org/packages/Speechwarp.Voice) | `dotnet add package Speechwarp.Voice` |
+| C# Kokoro voices (iOS) | NuGet, from the next release | `dotnet add package Speechwarp.Voice.Kokoro`, and optionally `Speechwarp.Voice.Kokoro.Gpu` |
+| C# eSpeak NG voices (iOS, **GPL-3.0**) | NuGet, from the next release | `dotnet add package Speechwarp.Voice.Espeak` |
 
 The Maven lines are for Gradle (`build.gradle.kts`); with Maven, use group `io.github.fredgaffey`, artifact
 `speechwarp-android` or `speechwarp`. For Swift, add the package in Xcode under File, Add Package
 Dependencies, or in `Package.swift` as shown. Each binding's README has a first example.
 
-## Speech from text, on Apple devices
+## Voices: speech from text
 
-An optional module reads text aloud with Apple's voices, Eloquence among them (the compact voice many fast
-screen-reader listeners use, included from iOS 16 and macOS 13), and speeds it up with speechwarp, so the same
-speeds and high-speed options work as for recordings. It renders sentence by sentence a little ahead of playback,
-in the background, and reports which character is being spoken. Swift: the `SpeechwarpVoice` product of the
-Swift package. C#: the `Speechwarp.Voice` package (`dotnet add package Speechwarp.Voice`, iOS 16 and later).
+Optional packages read text aloud on the device, sped up by speechwarp like any recording, so the same speeds and
+high-speed options apply. Each engine implements one small interface (`ISentenceVoice` in C#, `SentenceVoice` in
+Swift). A live reader, `VoicedText`, works with any of them:
 
-```swift
-import SpeechwarpVoice
-let reed = SpeechVoice.eloquence(language: "en-US").first { $0.name == "Reed" }!
-let book = try SpokenText(text, voice: reed, voiceRate: SpeechRate.maximum)   // about 4x by itself
-book.speed = 1.5                                                              // speechwarp on top
-let samples = book.read(maxFrames: 1024)          // on the audio thread; mono at book.sampleRate
-let at = book.characterPosition                   // for highlighting
+- it speaks sentence by sentence on its own thread, minutes ahead of playback;
+- it can change the voice between sentences;
+- it reports which character is being heard;
+- it keeps slow voices' audio on disk (`VoiceCache`).
+
+| Engine | C# (iOS 16+) | Swift | Licence |
+|---|---|---|---|
+| Apple's voices, Eloquence among them | `Speechwarp.Voice` | `SpeechwarpVoice` | Apache-2.0 |
+| Kokoro-82M, neural, on ONNX Runtime (the app downloads the model) | `Speechwarp.Voice.Kokoro` | - | Apache-2.0 |
+| Kokoro-82M on the iPhone's GPU (MLX), optional and off by default | `Speechwarp.Voice.Kokoro.Gpu` | - | Apache-2.0 |
+| eSpeak NG voices, and the phonemizer Kokoro needs | `Speechwarp.Voice.Espeak` | `SpeechwarpVoiceEspeak` | **GPL-3.0-or-later** |
+
+**eSpeak NG is GPL-3.0-or-later, and so are `Speechwarp.Voice.Espeak` and `SpeechwarpVoiceEspeak`:** an app that
+uses them must be distributed under the GPL-3.0. Kokoro takes any phonemizer, so it does not require eSpeak. The
+Kokoro and eSpeak packages are published from the next release; until then build them from this repository. See
+[Voices](docs/voices.md).
+
+```csharp
+using var book = new VoicedText(text, new AppleSentenceVoice("com.apple.eloquence.en-US.Reed")) { Speed = 2 };
+int frames = book.Read(buffer);                       // on the audio thread; mono at book.SampleRate
+int at = book.CharacterPosition;                      // for highlighting
+book.SetVoice(new KokoroSentenceVoice(modelDirectory, "af_heart", new EspeakPhonemizer()));  // from the next sentence
 ```
 
 ## Speech to text
@@ -101,6 +117,8 @@ Start with the [guide](docs/guide.md): frames, the write and read cycle, what th
 
 - [Building a player](docs/player.md) - playing in real time, seeking, the progress bar, threads
 - [API reference](docs/api.md) - every function, in every language
+- [Voices](docs/voices.md) - reading text aloud with Apple's voices, Kokoro or eSpeak NG, the live reader and the
+  voice cache
 - [Speech to text](docs/speech-to-text.md) - transcribing a sentence, a book or the microphone, and scoring
   a sentence said back
 - [How it works](docs/how-it-works.md) - what the algorithm does, and what this library adds to upstream
@@ -175,4 +193,6 @@ nonlinear speed-up, and about 2000 times faster without.
 
 ## Licence
 
-Apache-2.0. Third-party code keeps its own licence: see `NOTICE` and `third_party/`.
+Apache-2.0. Third-party code keeps its own licence: see `NOTICE` and `third_party/`. The one exception is the
+eSpeak NG packages (`Speechwarp.Voice.Espeak`, the Swift product `SpeechwarpVoiceEspeak`), which are
+GPL-3.0-or-later because eSpeak NG is.

@@ -112,6 +112,30 @@ and Go have no normaliser to hand, so give them text in one form (most text is N
 The system delivers speech on the main thread, which must keep running; `read` never waits for rendering.
 Character positions are UTF-16 offsets. Audio is mono at `sampleRate` (22,050 Hz for Eloquence).
 
+## Voices: engines, the live reader, the cache
+
+See [Voices](voices.md). C# packages are iOS only. Kokoro is C# only; the Swift reader takes Apple's and eSpeak's voices.
+
+| | Swift | C# |
+|---|---|---|
+| An engine | protocol `SentenceVoice`: `id`, `sampleRate`, `speak(_:)`, `keepsSpoken` | `ISentenceVoice`: `Id`, `SampleRate`, `Speak(sentence)`, `KeepsSpoken` (`Speechwarp.Voice`) |
+| Text to IPA | protocol `Phonemizer`: `phonemize(_:language:)` | `IPhonemizer.Phonemize(text, language)` |
+| Apple's voices | `AppleSentenceVoice` (`SpeechwarpVoice`) | `new AppleSentenceVoice(voice or identifier, rate)`, id "apple:IDENTIFIER" |
+| eSpeak NG (GPL-3.0) | `EspeakSentenceVoice`, `EspeakPhonemizer`, `Espeak.shared` (`SpeechwarpVoiceEspeak`) | `new EspeakSentenceVoice(language, wordsPerMinute, pitch)`, `EspeakPhonemizer`, `Espeak.Speak`, `.Phonemes`, `.Voices`, `.Variants`, `.DataPath` (`Speechwarp.Voice.Espeak`) |
+| Kokoro (CPU) | - | `new KokoroSentenceVoice(directory, voice, phonemizer, options, accelerator)` or `(engine, voice)`, id "kokoro:NAME"; `new KokoroEngine(directory, phonemizer, options)`: `Speak`, `SpeakPhonemes`, `Phonemize`; `KokoroOptions` (`ModelFile`, `Threads`, `Provider`) (`Speechwarp.Voice.Kokoro`) |
+| Kokoro's files | - | `KokoroModels`: `Models`, `Voices`, `Tokenizer`, `MissingFiles(directory, voice)`, `IsInstalled`, `ModelPath`, `VoicePath`, `LanguageOf`; each `KokoroFile` has `RelativePath`, `SizeBytes`, `Url`, `Sha256` |
+| Kokoro benchmark | - | `KokoroBenchmark.Run(directory, phonemizer, text, ...)` returns `RealTimeFactor`, `TimesRealTime` |
+| Kokoro on the GPU | - | `new KokoroGpuAccelerator(directory)` passed as `accelerator`; `KokoroGpu.WatchAppState()`, `.IsIncluded`, `.IsAvailable(directory)`, `.Model`, `.Timeout`, `.Log`, `.Close()` (`Speechwarp.Voice.Kokoro.Gpu`) |
+| The live reader | `VoicedText(_:voice:options:)` or `VoicedText(_:voiceID:factory:options:)`; `VoicedText.Options` | `new VoicedText(text, voice, options)` or `(text, voiceId, factory, options)`; `VoicedTextOptions` (`SampleRate`, `SpeedUp`, `Lookahead`, `KeptLookahead`, `SecondsPerCharacter`, `CacheDirectory`, `SpeakAheadToDisk`) |
+| Read the audio | `read(maxFrames:)`, `read(into:)` | `Read(Span<float>)` (never waits) |
+| Change voice | `setVoice(_:)`, `setVoice(id:)` | `SetVoice(voice)`, `SetVoice(id)` (from the next sentence not yet started) |
+| Speed on top | `speed`, `configure { ... }` | `Speed`, `Configure(stream => ...)` |
+| Where it is | `characterPosition`, `sentenceIndex`, `position` | `CharacterPosition`, `SentenceIndex`, `Position` |
+| Timeline | `time(atFrame:)`, `character(atFrame:)`, `duration` | `TimeAt(frame)`, `CharacterAt(frame)`, `Duration` |
+| Jump | `seek(toCharacter:)`, `seek(toTime:)` | `Seek(character)`, `Seek(TimeSpan)` |
+| State | `voiceID`, `isWaiting`, `isFinished`, `lastError`, `close()` | `VoiceId`, `IsWaiting`, `IsFinished`, `LastError`, `Dispose()` |
+| The cache | `VoiceCache(text:voiceID:directory:)`: `has`, `load(_:sampleRate:)`, `save`, `remove`, `clear`; `blockSize`, `defaultDirectory` | `new VoiceCache(text, voiceId, directory)`: `Has`, `Load(block, sampleRate)`, `Save`, `Remove`, `Clear`; `BlockSize` (40), `DefaultDirectory` |
+
 ## Speech to text with whisper.cpp (Listen)
 
 An optional module, `listen/` (C library `speechwarp_listen`, header `listen/include/speechwarp_listen.h`), packaged

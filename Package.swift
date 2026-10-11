@@ -87,3 +87,36 @@ if FileManager.default.fileExists(atPath: Context.packageDirectory + "/" + liste
         ),
     ]
 }
+
+// Optional: eSpeak NG's voices and phonemes (SpeechwarpVoiceEspeak). LICENSED UNDER THE GPL-3.0-OR-LATER, unlike the
+// rest of this package: an app that uses this product must be distributed under the GPL-3.0 too. eSpeak NG is a
+// submodule that is not fetched by default; its library is a binary framework, and its data a resource folder, that
+// `bindings/dotnet/Speechwarp.Voice.Espeak/native-build/build-espeak.sh swift` builds. As with SpeechwarpListen, the
+// product exists only once they have been built (then run `swift package purge-cache`).
+let espeakFramework = "bindings/swift/Frameworks/espeak_ng.xcframework"
+let espeakData = "bindings/swift/Sources/SpeechwarpVoiceEspeak/espeak-ng-data"
+if FileManager.default.fileExists(atPath: Context.packageDirectory + "/" + espeakFramework),
+   FileManager.default.fileExists(atPath: Context.packageDirectory + "/" + espeakData) {
+    package.products.append(.library(name: "SpeechwarpVoiceEspeak", targets: ["SpeechwarpVoiceEspeak"]))
+    package.targets += [
+        .binaryTarget(name: "espeak_ng", path: espeakFramework),
+        .target(
+            name: "SpeechwarpVoiceEspeak",
+            dependencies: [
+                "SpeechwarpVoice",
+                .target(name: "espeak_ng", condition: .when(platforms: [.macOS, .iOS])),
+            ],
+            path: "bindings/swift/Sources/SpeechwarpVoiceEspeak",
+            resources: [.copy("espeak-ng-data")]
+        ),
+        .testTarget(
+            name: "SpeechwarpVoiceEspeakTests",
+            dependencies: ["SpeechwarpVoiceEspeak"],
+            path: "bindings/swift/Tests/SpeechwarpVoiceEspeakTests"
+        ),
+    ]
+}
+
+// Kokoro on the GPU (MLX) is a separate Swift package, bindings/swift/KokoroGPU, which builds the framework that the
+// Speechwarp.Voice.Kokoro.Gpu NuGet package carries. It is not a product here: it would make every user of this package
+// fetch MLX. Swift apps can use mlalma/kokoro-ios directly, behind a SentenceVoice of their own.

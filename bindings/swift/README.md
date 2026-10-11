@@ -129,6 +129,38 @@ failing with "does not contain a binary artifact").
 An app depending on this package from Git does not get the product yet. The Listen workflow builds the framework
 as a zip with its checksum, ready for a binary target with a URL once it is attached to a release.
 
+## Voices: speech from text
+
+The `SpeechwarpVoice` product reads text aloud, sped up by speechwarp. `VoicedText` reads a text with any
+`SentenceVoice`, sentence by sentence, ahead of playback:
+
+- the voice can change between sentences;
+- it reports the character being heard;
+- with `Options.cacheDirectory` set, a slow voice's audio is kept in a `VoiceCache`.
+
+Engines: `AppleSentenceVoice` (Apple's voices, Eloquence among them), and `EspeakSentenceVoice` in the optional
+`SpeechwarpVoiceEspeak` product.
+
+```swift
+import SpeechwarpVoice
+let reed = SpeechVoice.eloquence(language: "en-US").first { $0.name == "Reed" }!
+let book = try VoicedText(text, voice: try AppleSentenceVoice(voice: reed))
+book.speed = 2
+let samples = book.read(maxFrames: 1024)          // on the audio thread; never waits
+let at = book.characterPosition                   // for highlighting
+```
+
+**`SpeechwarpVoiceEspeak` is GPL-3.0-or-later**, because eSpeak NG is: an app that uses it must be distributed
+under the GPL-3.0. It exists only once eSpeak's framework and data have been built locally (then run
+`swift package purge-cache`):
+
+```sh
+git submodule update --init --checkout third_party/espeak-ng
+bindings/dotnet/Speechwarp.Voice.Espeak/native-build/build-espeak.sh swift
+```
+
+See [Voices](../../docs/voices.md).
+
 ## Testing it here
 
 ```sh

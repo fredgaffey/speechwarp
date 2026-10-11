@@ -116,9 +116,12 @@ jobs:
           path: package/*.nupkg
 
   voice:
-    # Speechwarp.Voice: Apple's voices for iOS apps. Builds on macOS, where the iOS workload is available.
-    name: voice package
+    # Speechwarp.Voice (Apple's voices and the live reader) and the engines that plug into it: Speechwarp.Voice.Kokoro,
+    # Speechwarp.Voice.Kokoro.Gpu and Speechwarp.Voice.Espeak (GPL-3.0-or-later). All for iOS, so they build on macOS,
+    # where the iOS workload is available.
+    name: voice packages
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -126,12 +129,25 @@ jobs:
           dotnet-version: 10.0.x
       - name: Install the iOS workload
         run: dotnet workload install ios
+      - name: Fetch eSpeak NG
+        run: git submodule update --init --checkout --depth 1 third_party/espeak-ng
+      - name: Build eSpeak NG for iOS
+        run: bindings/dotnet/Speechwarp.Voice.Espeak/native-build/build-espeak.sh dotnet
+      - name: Get Xcode's Metal toolchain
+        # MLX's shaders need it; recent Xcodes download it separately.
+        run: xcrun -f metal || xcodebuild -downloadComponent MetalToolchain
+      - name: Build Kokoro for the GPU
+        run: bindings/swift/KokoroGPU/build-frameworks.sh
       - name: Pack
-        run: dotnet pack bindings/dotnet/Speechwarp.Voice -c Release -o package
+        run: |
+          for id in Speechwarp.Voice Speechwarp.Voice.Kokoro Speechwarp.Voice.Kokoro.Gpu Speechwarp.Voice.Espeak; do
+            dotnet pack "bindings/dotnet/$id" -c Release -o package
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: nuget-voice-package
-          path: package/Speechwarp.Voice.*.nupkg
+          path: package/Speechwarp.Voice*.nupkg
+          if-no-files-found: error
 
   publish:
     # Only for version tags, and only once every native has built and the tests have passed everywhere.
@@ -154,7 +170,7 @@ jobs:
       - name: Check the tag matches the version being published
         run: |
           ls *.nupkg
-          for id in Speechwarp Speechwarp.Voice; do
+          for id in Speechwarp Speechwarp.Voice Speechwarp.Voice.Kokoro Speechwarp.Voice.Kokoro.Gpu Speechwarp.Voice.Espeak; do
             test -f "$id.${GITHUB_REF_NAME#v}.nupkg" ||
               { echo "Tag $GITHUB_REF_NAME does not match the version of $id"; exit 1; }
           done
@@ -163,7 +179,7 @@ jobs:
         with:
           user: ${{ vars.NUGET_USER }}
       - run: |
-          for id in Speechwarp Speechwarp.Voice; do
+          for id in Speechwarp Speechwarp.Voice Speechwarp.Voice.Kokoro Speechwarp.Voice.Kokoro.Gpu Speechwarp.Voice.Espeak; do
             dotnet nuget push "$id.${GITHUB_REF_NAME#v}.nupkg" --skip-duplicate \
               --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json
           done

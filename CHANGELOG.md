@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- **Voices: more engines, one live reader.** Text-to-speech engines implement one small interface,
+  `ISentenceVoice` / `SentenceVoice` (with `IPhonemizer` / `Phonemizer` for neural voices).
+  - The live reader `VoicedText`, in C# and Swift, reads a text with any engine:
+    - it speaks minutes ahead on its own thread, and `Read` never waits;
+    - the voice can change between sentences;
+    - it reports the character position, and seeks by character or by time;
+    - speed-up is optional (`SpeedUp = false` passes the audio through).
+  - `VoiceCache` keeps slow voices' audio on disk, in blocks of 40 sentences as AAC.
+  - `AppleSentenceVoice` puts Apple's voices behind the interface. `SpokenText` keeps its API and is now a
+    wrapper over `VoicedText`.
+  - New NuGet packages, all for iOS:
+    - `Speechwarp.Voice.Kokoro`: Kokoro-82M on ONNX Runtime, with a catalogue of the model and voice files and
+      their hashes, and a benchmark. The engine repairs the fp16 model's occasional NaN output.
+    - `Speechwarp.Voice.Kokoro.Gpu`: Kokoro on the iPhone's GPU through MLX. Optional and off by default, on
+      screen only, devices on iOS 18 or later.
+    - `Speechwarp.Voice.Espeak`: eSpeak NG 1.52.0's voices and its phonemizer for Kokoro.
+  - New Swift product: `SpeechwarpVoiceEspeak`, from a framework built locally.
+  - **The eSpeak packages are GPL-3.0-or-later**, unlike everything else here.
+  - See [Voices](docs/voices.md).
+
+- eSpeak NG is a git submodule (`third_party/espeak-ng`, 1.52.0), fetched only when asked for.
+
 - **Word scoring** for the trainer: `speechwarp_score_words` aligns a listener's repeat-back of a sentence
   with the sentence (word-level edit distance on normalised words) and returns the share right with words
   right, missed, wrong and extra. In every binding (`WordScore.Of`, `score_words`, `scoreWords`,
