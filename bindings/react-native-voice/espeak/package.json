@@ -1,0 +1,96 @@
+{
+  "name": "react-native-speechwarp-voice-espeak",
+  "version": "0.3.7",
+  "description": "eSpeak NG's voices, and its phonemizer for Kokoro, for react-native-speechwarp-voice. GPL-3.0-or-later.",
+  "main": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "exports": {
+    ".": {
+      "react-native-speechwarp-voice-source": "./src/index.tsx",
+      "types": "./lib/typescript/src/index.d.ts",
+      "default": "./lib/module/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "scripts",
+    "*.podspec",
+    "COPYING",
+    "NOTICE",
+    "!ios/build",
+    "!android/build",
+    "!android/.cxx",
+    "!**/__tests__",
+    "!**/.*"
+  ],
+  "scripts": {
+    "vendor": "sh scripts/vendor.sh",
+    "prepare": "sh scripts/vendor.sh && bob build"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "text-to-speech",
+    "tts",
+    "espeak-ng",
+    "phonemizer"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fredgaffey/speechwarp.git",
+    "directory": "bindings/react-native-voice/espeak"
+  },
+  "author": "The speechwarp contributors <noreply@github.com> (https://github.com/fredgaffey)",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/fredgaffey/speechwarp/issues"
+  },
+  "homepage": "https://github.com/fredgaffey/speechwarp/blob/main/docs/voices.md#react-native",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "react-native-builder-bob": "^0.43.1",
+    "react-native-speechwarp-voice": "workspace:*"
+  },
+  "peerDependencies": {
+    "react-native": "*",
+    "react-native-speechwarp-voice": "0.3.7"
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  },
+  "codegenConfig": {
+    "name": "SpeechwarpVoiceEspeakSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "io.github.fredgaffey.speechwarp.reactnative.voice.espeak"
+    },
+    "ios": {
+      "modulesProvider": {
+        "SpeechwarpVoiceEspeak": "RNSpeechwarpVoiceEspeak"
+      }
+    }
+  }
+}

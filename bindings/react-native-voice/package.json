@@ -1,0 +1,138 @@
+{
+  "name": "react-native-speechwarp-voice",
+  "version": "0.3.7",
+  "description": "Text read aloud on iOS and Android by the system's voices (or Kokoro and eSpeak NG), sped up by speechwarp, with the character being spoken",
+  "main": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "exports": {
+    ".": {
+      "react-native-speechwarp-voice-source": "./src/index.tsx",
+      "types": "./lib/typescript/src/index.d.ts",
+      "default": "./lib/module/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "cpp",
+    "scripts",
+    "*.podspec",
+    "LICENSE",
+    "NOTICE",
+    "react-native.config.js",
+    "!ios/build",
+    "!android/build",
+    "!android/gradle",
+    "!android/gradlew",
+    "!android/gradlew.bat",
+    "!android/local.properties",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
+  "scripts": {
+    "example": "yarn workspace react-native-speechwarp-voice-example",
+    "vendor": "sh scripts/vendor.sh",
+    "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib espeak/lib kokoro/lib",
+    "prepare": "sh scripts/vendor.sh && bob build",
+    "typecheck": "tsc",
+    "test": "jest"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "text-to-speech",
+    "tts",
+    "speech",
+    "audiobook"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fredgaffey/speechwarp.git",
+    "directory": "bindings/react-native-voice"
+  },
+  "author": "The speechwarp contributors <noreply@github.com> (https://github.com/fredgaffey)",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/fredgaffey/speechwarp/issues"
+  },
+  "homepage": "https://github.com/fredgaffey/speechwarp/blob/main/docs/voices.md#react-native",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@react-native-community/cli": "20.1.0",
+    "@react-native/babel-preset": "0.86.2",
+    "@react-native/jest-preset": "0.86.2",
+    "@types/react": "^19.2.0",
+    "del-cli": "^7.0.0",
+    "jest": "^29.7.0",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-builder-bob": "^0.43.1",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "workspaces": [
+    "example",
+    "espeak",
+    "kokoro"
+  ],
+  "packageManager": "yarn@4.11.0",
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  },
+  "codegenConfig": {
+    "name": "SpeechwarpVoiceSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "io.github.fredgaffey.speechwarp.reactnative.voice"
+    },
+    "ios": {
+      "modulesProvider": {
+        "SpeechwarpVoice": "RNSpeechwarpVoice"
+      }
+    }
+  },
+  "jest": {
+    "preset": "@react-native/jest-preset",
+    "testEnvironmentOptions": {
+      "customExportConditions": [
+        "require",
+        "react-native",
+        "react-native-speechwarp-voice-source"
+      ]
+    },
+    "modulePathIgnorePatterns": [
+      "<rootDir>/example/node_modules",
+      "<rootDir>/lib/",
+      "<rootDir>/espeak/lib/",
+      "<rootDir>/kokoro/lib/"
+    ]
+  }
+}

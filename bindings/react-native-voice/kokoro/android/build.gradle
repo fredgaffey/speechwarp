@@ -1,0 +1,61 @@
+// Kokoro-82M for react-native-speechwarp-voice, over the Android library io.github.fredgaffey:speechwarp-voice-kokoro
+// (ONNX Runtime's CPU).
+buildscript {
+  ext.SpeechwarpVoiceKokoro = [
+    kotlinVersion: "2.1.20",
+    minSdkVersion: 24,
+    compileSdkVersion: 36
+  ]
+
+  ext.getExtOrDefault = { prop ->
+    if (rootProject.ext.has(prop)) {
+      return rootProject.ext.get(prop)
+    }
+
+    return SpeechwarpVoiceKokoro[prop]
+  }
+
+  repositories {
+    google()
+    mavenCentral()
+  }
+
+  dependencies {
+    classpath "com.android.tools.build:gradle:8.7.2"
+    // noinspection DifferentKotlinGradleVersion
+    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${getExtOrDefault('kotlinVersion')}"
+  }
+}
+
+apply plugin: "com.android.library"
+
+if (project.extensions.findByName("kotlin") == null) {
+  apply plugin: "kotlin-android"
+}
+
+apply plugin: "com.facebook.react"
+
+// The Android library at the same version as this package (see react-native-speechwarp-voice's build.gradle).
+def speechwarpVersion = new groovy.json.JsonSlurper().parse(file("../package.json")).version
+
+android {
+  namespace "io.github.fredgaffey.speechwarp.reactnative.voice.kokoro"
+
+  compileSdkVersion getExtOrDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdkVersion getExtOrDefault("minSdkVersion")
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  // The registry of engines (VoiceProvider) is in react-native-speechwarp-voice's native module.
+  implementation project(":react-native-speechwarp-voice")
+  implementation "io.github.fredgaffey:speechwarp-voice-kokoro:${speechwarpVersion}"
+}

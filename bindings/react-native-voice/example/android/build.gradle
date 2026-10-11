@@ -1,0 +1,32 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+// The example builds against the speechwarp Android libraries of this repository, not those on Maven Central: run
+// `./gradlew publishToMavenLocal` in bindings/android first. An app outside the repository needs none of this.
+allprojects {
+    repositories {
+        exclusiveContent {
+            forRepository { mavenLocal() }
+            filter { includeGroup("io.github.fredgaffey") }
+        }
+    }
+}

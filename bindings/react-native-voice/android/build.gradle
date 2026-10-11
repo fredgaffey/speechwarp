@@ -1,0 +1,63 @@
+// The React Native module over the Android library io.github.fredgaffey:speechwarp-voice (the live reader, the voice
+// cache and Android's voices). That library does the work; this module plays it with AudioTrack and talks to JavaScript.
+buildscript {
+  ext.SpeechwarpVoice = [
+    kotlinVersion: "2.1.20",
+    minSdkVersion: 24,
+    compileSdkVersion: 36
+  ]
+
+  ext.getExtOrDefault = { prop ->
+    if (rootProject.ext.has(prop)) {
+      return rootProject.ext.get(prop)
+    }
+
+    return SpeechwarpVoice[prop]
+  }
+
+  repositories {
+    google()
+    mavenCentral()
+  }
+
+  dependencies {
+    classpath "com.android.tools.build:gradle:8.7.2"
+    // noinspection DifferentKotlinGradleVersion
+    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${getExtOrDefault('kotlinVersion')}"
+  }
+}
+
+apply plugin: "com.android.library"
+
+if (project.extensions.findByName("kotlin") == null) {
+  apply plugin: "kotlin-android"
+}
+
+apply plugin: "com.facebook.react"
+
+// The Android library is published to Maven Central at the same version as this package, so the two always match.
+// To build against a local build of bindings/android instead, publish it to Maven Local
+// (`./gradlew publishToMavenLocal` there) and add mavenLocal() to the app's repositories, as the example does.
+def speechwarpVersion = new groovy.json.JsonSlurper().parse(file("../package.json")).version
+
+android {
+  namespace "io.github.fredgaffey.speechwarp.reactnative.voice"
+
+  compileSdkVersion getExtOrDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdkVersion getExtOrDefault("minSdkVersion")
+    consumerProguardFiles "consumer-rules.pro"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  // api: the engine packages (react-native-speechwarp-voice-espeak, -kokoro) implement SentenceVoice from it.
+  api "io.github.fredgaffey:speechwarp-voice:${speechwarpVersion}"
+}

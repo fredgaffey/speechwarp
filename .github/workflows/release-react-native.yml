@@ -11,6 +11,9 @@ name: Release React Native
 # environment secret NPM_TOKEN, and delete the secret once trusted publishing is set up. While the secret
 # exists it is used. The tag also publishes the other packages (python.yml, js.yml and the other
 # release-*.yml).
+#
+# The same tag publishes the voice packages of bindings/react-native-voice (build-voice, publish-voice): each of the
+# three npm package names needs trusted publishing set up on npmjs.com the same way.
 
 on:
   push:
@@ -83,3 +86,100 @@ jobs:
       - run: npm publish "react-native-speechwarp-${GITHUB_REF_NAME#v}.tgz" --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # empty once trusted publishing is set up
+
+  # The voice packages in bindings/react-native-voice: react-native-speechwarp-voice, react-native-speechwarp-voice-espeak
+  # (GPL-3.0-or-later) and react-native-speechwarp-voice-kokoro. On macOS, because the eSpeak package carries eSpeak NG
+  # built for iOS. Their Android halves depend on the Maven artifacts of the same version (release-maven.yml).
+  build-voice:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: bindings/react-native-voice
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Fetch eSpeak NG
+        working-directory: .
+        run: git submodule update --init --checkout --depth 1 third_party/espeak-ng
+      - name: Build eSpeak NG for iOS
+        working-directory: .
+        run: bindings/dotnet/Speechwarp.Voice.Espeak/native-build/build-espeak.sh swift
+      - run: corepack enable
+      - run: yarn install --immutable
+      # Each copies in the native sources it compiles on iOS and builds lib/.
+      - run: |
+          yarn prepare
+          yarn workspace react-native-speechwarp-voice-espeak prepare
+          yarn workspace react-native-speechwarp-voice-kokoro prepare
+      - run: yarn typecheck
+      - run: yarn test
+      - name: Pack
+        run: |
+          npm pack --ignore-scripts
+          (cd espeak && npm pack --ignore-scripts --pack-destination ..)
+          (cd kokoro && npm pack --ignore-scripts --pack-destination ..)
+      - name: Check the packages hold what the native builds need
+        run: |
+          check() {
+            tar tzf "$1" > contents.txt
+            shift
+            for file in "$@"; do
+              grep -qx "package/$file" contents.txt || { echo "Missing from $tarball: $file"; exit 1; }
+            done
+            ! grep -E 'node_modules|/example/|__tests__|/\.' contents.txt || { echo "Files that do not belong in $1"; exit 1; }
+          }
+          tarball=$(ls react-native-speechwarp-voice-[0-9]*.tgz)
+          check "$tarball" LICENSE NOTICE SpeechwarpVoice.podspec android/build.gradle ios/RNSpeechwarpVoice.mm \
+            ios/vendor/VoicedText.swift ios/vendor/SpeechwarpStream.swift cpp/speechwarp/include/speechwarp.h \
+            cpp/speechwarp/include/module.modulemap cpp/speechwarp/src/speechwarp.c \
+            cpp/speechwarp/third_party/kissfft/kiss_fft.c cpp/speechwarp/third_party/sonic/LICENSE \
+            lib/module/index.js lib/typescript/src/index.d.ts
+          tarball=$(ls react-native-speechwarp-voice-espeak-*.tgz)
+          check "$tarball" COPYING NOTICE SpeechwarpVoiceEspeak.podspec android/build.gradle ios/EspeakPlugin.swift \
+            ios/vendor/Espeak.swift ios/vendor/espeak-ng-data/en_dict ios/vendor/espeak-ng-data/phondata \
+            ios/vendor/Frameworks/espeak_ng.xcframework/Info.plist \
+            ios/vendor/Frameworks/espeak_ng.xcframework/ios-arm64/libespeak-ng.a \
+            lib/module/index.js lib/typescript/src/index.d.ts
+          tarball=$(ls react-native-speechwarp-voice-kokoro-*.tgz)
+          check "$tarball" LICENSE NOTICE SpeechwarpVoiceKokoro.podspec android/build.gradle ios/KokoroPlugin.swift \
+            ios/vendor/KokoroModels.swift ios/vendor/KokoroEngine.swift lib/module/index.js lib/typescript/src/index.d.ts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-package-voice
+          path: bindings/react-native-voice/react-native-speechwarp-voice*.tgz
+
+  publish-voice:
+    # As `publish`. npm trusted publishing has to be set up for each of the three packages (this repository, this file,
+    # the environment `npm`); until then the first release of each uses the environment secret NPM_TOKEN.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-voice
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-package-voice
+      - name: Check the tag matches the version being published
+        run: |
+          ls *.tgz
+          for name in react-native-speechwarp-voice react-native-speechwarp-voice-espeak react-native-speechwarp-voice-kokoro; do
+            test -f "$name-${GITHUB_REF_NAME#v}.tgz" ||
+              { echo "Tag $GITHUB_REF_NAME does not match the version of $name"; exit 1; }
+          done
+      # The engine packages name react-native-speechwarp-voice as a peer, so it goes first.
+      - run: |
+          version=${GITHUB_REF_NAME#v}
+          npm publish "react-native-speechwarp-voice-$version.tgz" --access public
+          npm publish "react-native-speechwarp-voice-espeak-$version.tgz" --access public
+          npm publish "react-native-speechwarp-voice-kokoro-$version.tgz" --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

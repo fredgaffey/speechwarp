@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig",
+  "compilerOptions": { "rootDir": "." },
+  "include": ["src"],
+  "exclude": ["src/**/__tests__", "lib"]
+}
