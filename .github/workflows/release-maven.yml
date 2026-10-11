@@ -1,7 +1,10 @@
 name: Maven Central
 
-# Builds and tests the two JVM packages, and checks that each is complete as Maven Central needs it:
+# Builds and tests the JVM packages, and checks that each is complete as Maven Central needs it:
 #   io.github.fredgaffey:speechwarp-android  the Kotlin AAR for Android (native code for four ABIs)
+#   io.github.fredgaffey:speechwarp-voice    text read aloud on Android (pure Kotlin; depends on speechwarp-android)
+#   io.github.fredgaffey:speechwarp-voice-kokoro  Kokoro on ONNX Runtime's CPU (pure Kotlin; depends on speechwarp-voice)
+#   io.github.fredgaffey:speechwarp-voice-espeak  eSpeak NG (GPL-3.0-or-later; native code for four ABIs, English data)
 #   io.github.fredgaffey:speechwarp          the desktop Java JAR (native libraries for every system inside)
 # The desktop natives are built on each system and then put into one JAR, as in more-bindings.yml.
 #
@@ -95,9 +98,9 @@ jobs:
           distribution: temurin
           java-version: 21
       - name: Test
-        run: ./gradlew :speechwarp:testReleaseUnitTest
-      - name: Build the AAR and install it into a local Maven repository
-        run: ./gradlew :speechwarp:publishToMavenLocal
+        run: ./gradlew :speechwarp:testReleaseUnitTest :speechwarp-voice:testReleaseUnitTest
+      - name: Build the AARs and install them into a local Maven repository
+        run: ./gradlew :speechwarp:publishToMavenLocal :speechwarp-voice:publishToMavenLocal
       - name: Check the AAR carries every ABI and the licences
         run: |
           aar="speechwarp/build/outputs/aar/speechwarp-release.aar"
@@ -108,10 +111,58 @@ jobs:
           unzip -p "$aar" classes.jar > "$RUNNER_TEMP/classes.jar"
           unzip -l "$RUNNER_TEMP/classes.jar" | grep -q " META-INF/licenses/speechwarp/LICENSE\$" ||
             { echo "The licences are missing from the AAR"; exit 1; }
+      - name: Check speechwarp-voice depends on the speechwarp-android of the same version
+        run: |
+          version=$(sed -n 's/^#define SPEECHWARP_VERSION "\(.*\)"/\1/p' ../../include/speechwarp.h)
+          pom="$HOME/.m2/repository/io/github/fredgaffey/speechwarp-voice/$version/speechwarp-voice-$version.pom"
+          cat "$pom"
+          tr -d ' \n' < "$pom" | grep -q "<artifactId>speechwarp-android</artifactId><version>$version</version>" ||
+            { echo "speechwarp-voice's POM does not depend on speechwarp-android $version"; exit 1; }
+      - name: Fetch eSpeak NG
+        working-directory: .
+        run: git submodule update --init --checkout --depth 1 third_party/espeak-ng
+      - name: Test the voice engines and install them into a local Maven repository
+        run: >-
+          ./gradlew :speechwarp-voice-kokoro:testReleaseUnitTest :speechwarp-voice-espeak:testReleaseUnitTest
+          :speechwarp-voice-kokoro:publishToMavenLocal :speechwarp-voice-espeak:publishToMavenLocal
+      - name: Check the eSpeak AAR carries every ABI, its data and the licences
+        run: |
+          aar="speechwarp-voice-espeak/build/outputs/aar/speechwarp-voice-espeak-release.aar"
+          unzip -l "$aar"
+          for f in jni/arm64-v8a/libspeechwarp_espeak.so jni/armeabi-v7a/libspeechwarp_espeak.so \
+                   jni/x86_64/libspeechwarp_espeak.so jni/x86/libspeechwarp_espeak.so \
+                   assets/speechwarp-espeak/stamp assets/speechwarp-espeak/espeak-ng-data/en_dict \
+                   assets/speechwarp-espeak/espeak-ng-data/phondata 'assets/speechwarp-espeak/espeak-ng-data/voices/!v/klatt'; do
+            unzip -l "$aar" | grep -qF " $f" || { echo "Missing from the AAR: $f"; exit 1; }
+          done
+          unzip -p "$aar" classes.jar > "$RUNNER_TEMP/espeak-classes.jar"
+          for f in COPYING espeak-ng/COPYING espeak-ng/COPYING.BSD2 espeak-ng/COPYING.UCD speechwarp/LICENSE; do
+            unzip -l "$RUNNER_TEMP/espeak-classes.jar" | grep -q " META-INF/licenses/speechwarp-voice-espeak/$f\$" ||
+              { echo "The licence $f is missing from the eSpeak AAR"; exit 1; }
+          done
+      - name: Check the voice engines' POMs
+        run: |
+          version=$(sed -n 's/^#define SPEECHWARP_VERSION "\(.*\)"/\1/p' ../../include/speechwarp.h)
+          repo="$HOME/.m2/repository/io/github/fredgaffey"
+          for artifact in speechwarp-voice-kokoro speechwarp-voice-espeak; do
+            pom="$repo/$artifact/$version/$artifact-$version.pom"
+            cat "$pom"
+            tr -d ' \n' < "$pom" | grep -q "<artifactId>speechwarp-voice</artifactId><version>$version</version>" ||
+              { echo "$artifact's POM does not depend on speechwarp-voice $version"; exit 1; }
+          done
+          grep -q "<name>GPL-3.0-or-later</name>" "$repo/speechwarp-voice-espeak/$version/speechwarp-voice-espeak-$version.pom" ||
+            { echo "speechwarp-voice-espeak's POM does not say GPL-3.0-or-later"; exit 1; }
+          if grep -q "speechwarp-voice-espeak" "$repo/speechwarp-voice-kokoro/$version/speechwarp-voice-kokoro-$version.pom"; then
+            echo "speechwarp-voice-kokoro must not depend on the GPL eSpeak module"; exit 1
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: aar
-          path: bindings/android/speechwarp/build/outputs/aar/*.aar
+          path: |
+            bindings/android/speechwarp/build/outputs/aar/*.aar
+            bindings/android/speechwarp-voice/build/outputs/aar/*.aar
+            bindings/android/speechwarp-voice-kokoro/build/outputs/aar/*.aar
+            bindings/android/speechwarp-voice-espeak/build/outputs/aar/*.aar
 
   publish:
     # Only for version tags, and only once the desktop natives, the JAR and the AAR have built and passed their tests.
@@ -166,3 +217,33 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
         run: ./gradlew :speechwarp:publishToMavenCentral --no-configuration-cache
+      - name: Publish the Android voice AAR (io.github.fredgaffey:speechwarp-voice)
+        working-directory: bindings/android
+        env:
+          # Gradle reads properties set this way. The secrets are given to the steps that need them and no others.
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew :speechwarp-voice:publishToMavenCentral --no-configuration-cache
+      - name: Fetch eSpeak NG
+        # speechwarp-voice-espeak is built from it again for publishing.
+        run: git submodule update --init --checkout --depth 1 third_party/espeak-ng
+      - name: Publish the Kokoro AAR (io.github.fredgaffey:speechwarp-voice-kokoro)
+        working-directory: bindings/android
+        env:
+          # Gradle reads properties set this way. The secrets are given to the steps that need them and no others.
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew :speechwarp-voice-kokoro:publishToMavenCentral --no-configuration-cache
+      - name: Publish the eSpeak AAR (io.github.fredgaffey:speechwarp-voice-espeak, GPL-3.0-or-later)
+        working-directory: bindings/android
+        env:
+          # Gradle reads properties set this way. The secrets are given to the steps that need them and no others.
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew :speechwarp-voice-espeak:publishToMavenCentral --no-configuration-cache

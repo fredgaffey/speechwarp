@@ -19,6 +19,17 @@
       screen only, devices on iOS 18 or later.
     - `Speechwarp.Voice.Espeak`: eSpeak NG 1.52.0's voices and its phonemizer for Kokoro.
   - New Swift product: `SpeechwarpVoiceEspeak`, from a framework built locally.
+  - New Swift product: `SpeechwarpVoiceKokoro`, Kokoro-82M on ONNX Runtime's CPU (iOS and macOS), the same as
+    `Speechwarp.Voice.Kokoro`. ONNX Runtime (Microsoft's Swift package, 1.20.0) comes only with the new package
+    trait `Kokoro`, so other users of the package download nothing more. `Package.swift` now needs Swift 6.1 (Xcode
+    16.3) for traits and asks for macOS 11; older toolchains read `Package@swift-5.7.swift`, without Kokoro.
+  - New Android package `io.github.fredgaffey:speechwarp-voice` (Kotlin, API 21+): the same `SentenceVoice` and
+    `Phonemizer`, the live reader `VoicedText`, `VoiceCache` (AAC through MediaCodec) and
+    `AndroidSentenceVoice`, Android's own text-to-speech voices.
+  - New Android packages for the engines: `io.github.fredgaffey:speechwarp-voice-kokoro` (Kokoro on ONNX
+    Runtime's CPU, API 24+; the fp32 model by default, the fastest and NaN-free on an arm64 emulator) and
+    `io.github.fredgaffey:speechwarp-voice-espeak` (eSpeak NG 1.52.0 built with the NDK for four ABIs, English
+    data in the AAR; **GPL-3.0-or-later**).
   - **The eSpeak packages are GPL-3.0-or-later**, unlike everything else here.
   - See [Voices](docs/voices.md).
 

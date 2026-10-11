@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The tests use Kokoro, which needs Android 7.0 (ONNX Runtime does), where this library needs only 5.0. -->
+<manifest xmlns:tools="http://schemas.android.com/tools">
+    <uses-sdk tools:overrideLibrary="io.github.fredgaffey.speechwarp.voice.kokoro, ai.onnxruntime" />
+</manifest>

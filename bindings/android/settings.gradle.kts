@@ -15,3 +15,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "speechwarp-android"
 include(":speechwarp")
+include(":speechwarp-voice")
+include(":speechwarp-voice-kokoro")
+include(":speechwarp-voice-espeak")

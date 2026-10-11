@@ -7,15 +7,16 @@ voices' audio on disk, and knows which character is being spoken.
 | Engine | C# package | Swift | Licence | Speed | Notes |
 |---|---|---|---|---|---|
 | **Apple's voices** (Eloquence and the system's others) | `Speechwarp.Voice` | `SpeechwarpVoice` | Apache-2.0 | far faster than listening | built in, nothing to download |
-| **Kokoro-82M** on ONNX Runtime (CPU) | `Speechwarp.Voice.Kokoro` | - | Apache-2.0 (and the model) | about 2x real time in the iOS simulator on a Mac; not yet measured on a phone | neural; the app downloads a model (163 MB) |
+| **Kokoro-82M** on ONNX Runtime (CPU) | `Speechwarp.Voice.Kokoro` (Android: `speechwarp-voice-kokoro`) | `SpeechwarpVoiceKokoro` (trait `Kokoro`) | Apache-2.0 (and the model) | about 2x real time in the iOS simulator on a Mac, and 2.9x on an arm64 Android emulator (4 cores, fp32 model); not yet measured on a phone | neural; the app downloads a model (163 MB) |
 | **Kokoro-82M** on the GPU (MLX) | `Speechwarp.Voice.Kokoro.Gpu` | - | Apache-2.0 | not yet shown to work on a phone | optional, off by default, devices only |
-| **eSpeak NG** | `Speechwarp.Voice.Espeak` | `SpeechwarpVoiceEspeak` | **GPL-3.0-or-later** | far faster than listening | formant voices; also the phonemizer for Kokoro |
+| **eSpeak NG** | `Speechwarp.Voice.Espeak` (Android: `speechwarp-voice-espeak`) | `SpeechwarpVoiceEspeak` | **GPL-3.0-or-later** | far faster than listening | formant voices; also the phonemizer for Kokoro |
+| **Android's voices** (the system's text-to-speech) | - (Android: `speechwarp-voice`) | - | Apache-2.0 | far faster than listening | built in; see [On Android](#on-android) |
 
 All the C# packages are for iOS 16 and later (`net10.0-ios`). They are published from the release after 0.3.7;
 until then build them from this repository.
 
 > **eSpeak NG is GPL-3.0-or-later.** So is `Speechwarp.Voice.Espeak` (and the Swift product
-> `SpeechwarpVoiceEspeak`), unlike every other speechwarp package. An app that uses it must be distributed under the
+> `SpeechwarpVoiceEspeak`, and the Android library `speechwarp-voice-espeak`), unlike every other speechwarp package. An app that uses it must be distributed under the
 > GPL-3.0, with its complete source. Kokoro needs a phonemizer but not this one: it takes any `IPhonemizer`, so an
 > app that cannot be GPL can supply its own.
 
@@ -72,7 +73,7 @@ book.SetVoice("kokoro:af_heart");            // from the next sentence not yet s
 ```
 
 The Swift reader is the same (`VoicedText`, `VoicedText.Options`, `setVoice(id:)`, `read(maxFrames:)`,
-`seek(toCharacter:)`), with the Apple and eSpeak engines; Kokoro is C# only.
+`seek(toCharacter:)`), with the Apple, eSpeak and Kokoro engines (Kokoro on the CPU only; see [In Swift](#in-swift)).
 
 `SpokenText`, the Apple-only reader from 0.3.7, is unchanged and now a thin wrapper over `VoicedText`.
 
@@ -93,6 +94,96 @@ A slow voice (Kokoro on a phone speaks little faster than it is heard) is worth 
 
 A block is written on the reader's thread once its last sentence is spoken, which can be just after reading
 finishes. `Dispose` does not wait for that write; the write still finishes in the background.
+
+## On Android
+
+The Kotlin package `io.github.fredgaffey:speechwarp-voice` (Maven Central, Android 5.0 / API 21 and later,
+package `io.github.fredgaffey.speechwarp.voice`) has the same design. It depends on `speechwarp-android`.
+
+- `SentenceVoice` and `Phonemizer`: the interfaces, as above (`id`, `sampleRate`, `speak`, `keepsSpoken`).
+- `VoicedText` and `VoicedTextOptions`: the live reader. `read(FloatArray)` or `read(ShortArray)` never waits;
+  `seekToCharacter`, `seekToTime`, `timeAt`, `duration` and `position` (times in seconds); `setVoice(voice)`, or
+  `setVoice(id)` with a `VoiceFactory`; `configure { stream -> ... }`; `close()`.
+- `VoiceCache`: the same layout and keys as in C#. AAC through the platform's MediaCodec and MediaMuxer, read back
+  with MediaExtractor. `VoiceCache.defaultDirectory(context)` is `speechwarp-voice` in the app's cache directory.
+- `AndroidSentenceVoice`: the system's text-to-speech (`android.speech.tts.TextToSpeech`), id
+  "android:VOICE" (such as "android:en-us-x-iol-local"), or "android:VOICE/RATE/PITCH" away from rate and pitch 1.
+  Android speaks only into a file, so each sentence goes through a WAV file in the app's cache directory.
+  `AndroidSentenceVoice.voices(context)` lists the voices, and `open` and `fromId` start one and measure its sample
+  rate.
+- `Sentence.split(text)` cuts sentences with the platform's (ICU's) rules.
+
+**Never on the main thread.** The text-to-speech service starts asynchronously and reports to the main thread, so
+`speak`, `open`, `fromId` and `voices` throw `IllegalStateException` there. `VoicedText` speaks on its own thread.
+Make the first voice, and the reader if its factory starts a voice, on a background thread.
+
+```kotlin
+import io.github.fredgaffey.speechwarp.voice.*
+
+// On a background thread:
+val factory = VoiceFactory { id ->
+    when {
+        id.startsWith("android:") -> AndroidSentenceVoice.fromId(context, id)
+        else -> throw IllegalArgumentException(id)
+    }
+}
+val book = VoicedText(text, "android:en-us-x-iol-local", factory,
+    VoicedTextOptions(cacheDirectory = VoiceCache.defaultDirectory(context)))
+book.speed = 2f
+val frames = book.read(buffer)            // on the audio thread; mono at book.sampleRate
+val at = book.characterPosition           // for highlighting
+book.setVoice("android:en-gb-x-rjs-local") // from the next sentence not yet started
+```
+
+There is no `SpokenText` on Android: `VoicedText` with an `AndroidSentenceVoice` is the same thing.
+
+### Kokoro and eSpeak on Android
+
+Two more Android libraries, ports of the C# packages:
+
+- `io.github.fredgaffey:speechwarp-voice-kokoro` (Apache-2.0, Android 7.0 / API 24 and later, as ONNX Runtime
+  needs; package `io.github.fredgaffey.speechwarp.voice.kokoro`): `KokoroEngine`, `KokoroSentenceVoice`,
+  `KokoroModels`, `KokoroOptions` and `KokoroBenchmark`, as in C# below. ONNX Runtime 1.23.2 on the **CPU only**:
+  no NNAPI, GPU or other accelerator. Its default model is **`model.onnx` (fp32, 326 MB), not fp16** (see
+  [Which model on Android](#which-model-on-android)). It takes any `Phonemizer` and does not depend on eSpeak.
+- `io.github.fredgaffey:speechwarp-voice-espeak` (**GPL-3.0-or-later**, Android 5.0 / API 21 and later; package
+  `io.github.fredgaffey.speechwarp.voice.espeak`): `Espeak`, `EspeakSentenceVoice`, `EspeakPhonemizer`,
+  `EspeakVoice`. eSpeak NG 1.52.0 for four ABIs with the English data in the AAR's assets;
+  `Espeak.initialize(context)` (or any constructor that takes a context) copies the data to the app's files folder
+  the first time.
+
+```kotlin
+// On a background thread (the first eSpeak call copies its data; loading Kokoro takes a few seconds):
+val factory = VoiceFactory { id ->
+    when {
+        id.startsWith("espeak:") -> EspeakSentenceVoice(context, id.removePrefix("espeak:"))
+        id.startsWith("kokoro:") -> KokoroSentenceVoice(modelDirectory, id.removePrefix("kokoro:"), EspeakPhonemizer(context))
+        else -> throw IllegalArgumentException(id)
+    }
+}
+```
+
+#### Which model on Android
+
+Measured on an Android 16 arm64 emulator on an Apple Silicon Mac (4 cores, so near a phone's big cores but not a
+phone), ONNX Runtime 1.23.2's CPU, each model with and without XNNPACK. "NaN" counts the lengths of the C#
+package's test sentence (every other length from 20 characters, 77 in all) for which the model answered with NaN
+and the engine had to speak again. Speed is seconds of audio per second of work, over that sweep and over three
+paragraphs of about 15 s each, repairs included.
+
+| Model | XNNPACK | Load | NaN | Speed (sweep) | Speed (paragraphs) |
+|---|---|---|---|---|---|
+| **model.onnx** (fp32, 326 MB) | no | 2.5 s | 0 of 77 | 2.28x | **2.91x** |
+| model.onnx | yes | 2.1 s | 0 of 77 | 1.12x | 1.16x |
+| model_fp16.onnx (163 MB) | no | 4.2 s | 14 of 77 | 2.39x | 1.56x |
+| model_fp16.onnx | yes | 3.9 s | 18 of 77 | 1.07x | 1.28x |
+| model_q8f16.onnx (86 MB) | no | 2.6 s | 0 of 77 | 1.81x | 1.70x |
+| model_q8f16.onnx | yes | 2.6 s | 14 of 77 | 1.18x | 0.98x |
+
+So on Android the default is fp32, and XNNPACK is off (`KokoroOptions.xnnpack` turns it on). fp16 gives NaN about
+as often as on a Mac, and on long paragraphs the repairs cost it half its speed; q8f16 is the choice where 326 MB
+is too much. Not yet measured on a phone, where the memory (about the model's size) and big.LITTLE cores may change
+the answer; `KokoroOptions.threads` defaults to one a core, at most four.
 
 ## Kokoro
 
@@ -124,6 +215,35 @@ a little faster on a Mac's CPU. It has not yet been checked whether a phone beha
 
 `KokoroBenchmark.Run` measures how fast Kokoro speaks on the device. The desktop sample
 `bindings/dotnet/Speechwarp.Voice.Kokoro.Bench` runs it on a Mac.
+
+### In Swift
+
+The Swift product `SpeechwarpVoiceKokoro` (iOS and macOS) is the same engine on ONNX Runtime's CPU, through
+Microsoft's [Swift package](https://github.com/microsoft/onnxruntime-swift-package-manager) (ONNX Runtime 1.20.0):
+`KokoroEngine`, `KokoroSentenceVoice` (id "kokoro:NAME", or "kokoro:NAME/1.2" at another pace; 24 kHz;
+`keepsSpoken`), `KokoroModels` (the same catalogue, revision and hashes), `KokoroBenchmark`, and the
+`KokoroAccelerator` protocol, the counterpart of `IKokoroAccelerator` (returning nil leaves a sentence to the CPU).
+It takes any `Phonemizer` and does not depend on the GPL-licensed `SpeechwarpVoiceEspeak`.
+
+ONNX Runtime is about 60 MB to download, and Swift Package Manager downloads every binary in the package graph
+whether it is used or not. So it comes only with the package trait `Kokoro`, off by default; without it the product
+holds just `KokoroModels`. Turn it on where the package is added (Swift 6.1, Xcode 16.3 or later), or in Xcode's
+list of package dependencies:
+
+```swift
+.package(url: "https://github.com/fredgaffey/speechwarp", from: "0.3.8", traits: ["Kokoro"]),
+```
+
+```swift
+import SpeechwarpVoiceKokoro
+
+let voice = try KokoroSentenceVoice(directory: modelDirectory, voice: "af_heart", phonemizer: myPhonemizer)
+let book = try VoicedText(text, voice: voice)
+```
+
+ONNX Runtime 1.20.0 is the last release whose package asks for no more than iOS 13 and macOS 11; later ones ask for
+iOS 15 and macOS 14, which would raise the minimum of the whole speechwarp package. On a Mac it ran a little faster
+than the C# package on 1.23.2 (1.7x against 1.3x real time) and the fp16 model's NaN were mended the same way.
 
 ### On the GPU
 
@@ -169,7 +289,8 @@ Caveats:
 It carries eSpeak's English data (about 1.2 MB), which goes into the app bundle as `espeak-ng-data/`. Every call
 takes turns on one eSpeak.
 
-Read the licence note at the top of this page before using it.
+Read the licence note at the top of this page before using it. The Android library is described under
+[Kokoro and eSpeak on Android](#kokoro-and-espeak-on-android).
 
 ## Building the native parts
 
@@ -184,3 +305,7 @@ Nothing built is committed. CI builds all of it for the packages.
   because it fetches kokoro-ios, MisakiSwift and MLX at pinned versions.
 
 Both packages refuse to pack without their native parts.
+
+On Android, Gradle builds eSpeak itself (`bindings/android/speechwarp-voice-espeak`): the NDK compiles the library
+for each ABI, and the data is compiled on the build computer by upstream's command built from the same CMake
+project. It needs only the submodule, and `cmake` and a C compiler on macOS or Linux.
