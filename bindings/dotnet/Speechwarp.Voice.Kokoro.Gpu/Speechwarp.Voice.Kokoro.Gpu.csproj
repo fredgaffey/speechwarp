@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- MLX runs on Apple GPUs; this package is for iPhones (devices, iOS 18 and later, checked at run time). -->
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <PackageId>Speechwarp.Voice.Kokoro.Gpu</PackageId>
+    <!-- Keep in step with SPEECHWARP_VERSION in include/speechwarp.h (tools/bump-version.sh does). -->
+    <Version>0.3.7</Version>
+    <Authors>The speechwarp contributors</Authors>
+    <Description>Kokoro-82M neural text-to-speech on the iPhone's GPU through Apple's MLX (mlalma/kokoro-ios, with misaki's English pronunciations), as an accelerator for Speechwarp.Voice.Kokoro: faster than ONNX Runtime on the CPU, used only while the app is on screen (iOS refuses background GPU work) and only once the app opts in. Devices only, iOS 18 and later; simulator builds leave it out and speak on the CPU. Not an official Kokoro, hexgrad or Apple product.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/fredgaffey/speechwarp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/fredgaffey/speechwarp</RepositoryUrl>
+    <PackageTags>speech;tts;text-to-speech;kokoro;mlx;gpu;metal;neural;audiobook;ios;offline</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Speechwarp.Voice.Kokoro\Speechwarp.Voice.Kokoro.csproj" />
+    <!-- The framework and its resource bundles for iPhones, from ../../swift/KokoroGPU/build-frameworks.sh, and the
+         targets file that makes a device build embed them. -->
+    <None Include="native\**" Exclude="native\ios-arm64\licenses\**" Pack="true" PackagePath="native" />
+    <None Include="Speechwarp.Voice.Kokoro.Gpu.targets" Pack="true" PackagePath="buildTransitive" />
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <None Include="..\..\..\LICENSE;..\..\..\NOTICE" Pack="true" PackagePath="licenses" />
+    <!-- kokoro-ios, MisakiSwift, mlx-swift and the rest compiled into the framework (the build script copies them). -->
+    <None Include="native\ios-arm64\licenses\*" Pack="true" PackagePath="licenses\kokoro-gpu" />
+  </ItemGroup>
+
+  <!-- A package without the framework would build and quietly never use the GPU. -->
+  <Target Name="CheckKokoroGpuFramework" BeforeTargets="GenerateNuspec">
+    <Error Condition="!Exists('native\ios-arm64\SpeechwarpKokoroGPU.framework')"
+           Text="native/ios-arm64/SpeechwarpKokoroGPU.framework is missing: run bindings/swift/KokoroGPU/build-frameworks.sh before packing." />
+  </Target>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project>
+  <!-- Kokoro on the GPU: one framework (MLX, Kokoro, misaki) and the resource bundles it reads, put into iPhone builds
+       only. MLX needs a real GPU and the framework is built for devices alone, so simulator builds (iossimulator-*)
+       leave it out; there KokoroGpu.IsIncluded is false and Kokoro speaks on the CPU.
+
+       The framework is copied into the app's Frameworks folder (the SDK signs every framework there) but not linked to
+       the app: KokoroGpu loads it when first used, and only on iOS 18 and later, which it is built for. Linked, it
+       would load at every launch, and on an older iOS stop the app from starting.
+
+       An app that never wants the GPU (it adds about 42 MB) can set SpeechwarpKokoroGpu to false. -->
+  <PropertyGroup>
+    <_SpeechwarpKokoroGpuNative>$(MSBuildThisFileDirectory)..\native\ios-arm64\</_SpeechwarpKokoroGpuNative>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' and '$(RuntimeIdentifier)' == 'ios-arm64' and '$(SpeechwarpKokoroGpu)' != 'false'">
+    <BundleResource Include="$(_SpeechwarpKokoroGpuNative)SpeechwarpKokoroGPU.framework\**\*"
+                    LogicalName="Frameworks/SpeechwarpKokoroGPU.framework/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Each bundle goes to the top of the app, where MLX and Swift's resource lookup expect it. -->
+    <BundleResource Include="$(_SpeechwarpKokoroGpuNative)*.bundle\**\*" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
