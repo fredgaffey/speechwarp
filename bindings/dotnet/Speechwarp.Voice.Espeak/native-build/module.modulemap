@@ -1,0 +1,6 @@
+// Lets Swift import the C interface of espeak-ng.xcframework as CEspeakNG (the SpeechwarpVoiceEspeak target).
+module CEspeakNG {
+    header "espeak-ng/speak_lib.h"
+    header "espeak-ng/espeak_ng.h"
+    export *
+}

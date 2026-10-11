@@ -8,6 +8,7 @@ Unmodified copies of the upstream files this library is built from. Each folder 
 | `sonic/` | https://github.com/waywardgeek/sonic | `b93885dcb70aae50c6f76b0fe4e0868f029a077e` | Apache-2.0 |
 | `kissfft/` | https://github.com/mborgerding/kissfft | `e5e3fac46e0d94a8f8170c06706b7a4218828333` | BSD-3-Clause |
 | `whisper.cpp/` | https://github.com/ggml-org/whisper.cpp | `d1be6fde11ac6e0407606b4e42fe72d34add8037` (tag `v1.9.5`) | MIT (includes ggml, MIT) |
+| `espeak-ng/` | https://github.com/espeak-ng/espeak-ng | `4870adfa25b1a32b4361592f1be8a40337c58d6c` (tag `1.52.0`) | **GPL-3.0-or-later** (parts Apache-2.0, BSD-2-Clause, Unicode) |
 
 Only the files needed to build are copied: no tests, tools or build scripts. To update, copy the same files
 from a newer commit and change the hash here. Keep local changes out of these folders; put fixes upstream or
@@ -36,3 +37,17 @@ and nobody who only wants speechwarp downloads it. Fetch it explicitly to build 
 
 To update it, check out a newer tag inside the submodule, commit the new pointer, and change the commit here.
 The Python source distribution prunes it (`MANIFEST.in`), and the other packages list their files explicitly.
+
+## eSpeak NG (for Speechwarp.Voice.Espeak only; GPL-3.0-or-later)
+
+`espeak-ng/` is a git submodule, like `whisper.cpp/`, also marked `update = none`, so nobody downloads it unless
+they ask. Only the optional eSpeak packages use it: Speechwarp.Voice.Espeak (NuGet) and the SpeechwarpVoiceEspeak
+Swift target. **eSpeak NG is licensed under the GPL-3.0-or-later**, and so are those packages and any app that uses
+them; nothing else in this repository compiles or links it. Fetch it to build them:
+
+    git submodule update --init --checkout third_party/espeak-ng
+    bindings/dotnet/Speechwarp.Voice.Espeak/native-build/build-espeak.sh [dotnet|swift|all]
+
+The script compiles the library and its English data; see `bindings/dotnet/Speechwarp.Voice.Espeak/README.md`.
+To update, check out a newer tag inside the submodule, change `PACKAGE_VERSION` in
+`bindings/dotnet/Speechwarp.Voice.Espeak/native-build/config.h`, commit the new pointer, and change the commit here.

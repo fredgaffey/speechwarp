@@ -1,0 +1,19 @@
+<Project>
+  <!-- Links eSpeak NG into an iOS app and puts its data in the app bundle, as espeak-ng-data/, where Espeak.DataPath
+       looks by default. In the package this file is in buildTransitive/ and the files in native/ beside it; a project
+       that references Speechwarp.Voice.Espeak.csproj directly can import this file from the project folder, where
+       native/ is a subfolder. -->
+  <PropertyGroup>
+    <_SpeechwarpEspeakNative Condition="Exists('$(MSBuildThisFileDirectory)..\native\ios\espeak-ng.xcframework')">$(MSBuildThisFileDirectory)..\native\</_SpeechwarpEspeakNative>
+    <_SpeechwarpEspeakNative Condition="'$(_SpeechwarpEspeakNative)' == ''">$(MSBuildThisFileDirectory)native\</_SpeechwarpEspeakNative>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios'">
+    <!-- A static library, called through "__Internal"; ForceLoad keeps the linker from dropping the functions that
+         only managed code calls. -->
+    <NativeReference Include="$(_SpeechwarpEspeakNative)ios\espeak-ng.xcframework" Kind="Static" ForceLoad="true" />
+    <BundleResource Include="$(_SpeechwarpEspeakNative)espeak-ng-data\**\*">
+      <LogicalName>espeak-ng-data/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+      <Visible>false</Visible>
+    </BundleResource>
+  </ItemGroup>
+</Project>

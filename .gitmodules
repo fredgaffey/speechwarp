@@ -3,3 +3,8 @@
 	url = https://github.com/ggml-org/whisper.cpp
 	update = none
 	shallow = true
+[submodule "third_party/espeak-ng"]
+	path = third_party/espeak-ng
+	url = https://github.com/espeak-ng/espeak-ng
+	update = none
+	shallow = true

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- The native library is built for iOS only (native-build/build-espeak.sh), and the sentence voice interface it
+         implements is in Speechwarp.Voice, which is iOS only. -->
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <PackageId>Speechwarp.Voice.Espeak</PackageId>
+    <!-- Keep in step with SPEECHWARP_VERSION in include/speechwarp.h (tools/bump-version.sh does). -->
+    <Version>0.3.7</Version>
+    <Authors>The speechwarp contributors</Authors>
+    <Description>eSpeak NG for iOS: text spoken in eSpeak's own formant voices as a Speechwarp.Voice sentence voice, and text to IPA phonemes for neural voices such as Kokoro (Speechwarp.Voice.Kokoro). English data included. LICENSED UNDER THE GPL-3.0-OR-LATER, unlike the other speechwarp packages: an app that uses this package must be distributed under the GPL-3.0 too. Not an official eSpeak NG product.</Description>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/fredgaffey/speechwarp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/fredgaffey/speechwarp</RepositoryUrl>
+    <PackageTags>speech;tts;text-to-speech;espeak;espeak-ng;phonemes;ipa;phonemizer;kokoro;audiobook;ios;gpl</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The sentence voice and phonemizer interfaces. -->
+    <ProjectReference Include="..\Speechwarp.Voice\Speechwarp.Voice.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- iOS: eSpeak NG as a static library for devices and simulators, and its compiled data, from
+         native-build/build-espeak.sh, and the targets file that links the one and bundles the other into the app. -->
+    <None Include="native\**" Pack="true" PackagePath="native" />
+    <None Include="Speechwarp.Voice.Espeak.targets" Pack="true" PackagePath="buildTransitive" />
+    <None Include="README.md" Pack="true" PackagePath="" />
+    <!-- eSpeak NG is GPL-3.0-or-later, so this package is too; its other notices travel with it. -->
+    <None Include="COPYING" Pack="true" PackagePath="" />
+    <None Include="..\..\..\third_party\espeak-ng\COPYING.APACHE;..\..\..\third_party\espeak-ng\COPYING.BSD2;..\..\..\third_party\espeak-ng\COPYING.UCD"
+          Condition="Exists('..\..\..\third_party\espeak-ng\COPYING.UCD')" Pack="true" PackagePath="licenses\espeak-ng" />
+    <None Include="..\..\..\LICENSE;..\..\..\NOTICE" Pack="true" PackagePath="licenses\speechwarp" />
+  </ItemGroup>
+
+  <!-- A package without the library would build apps that fail at run time; refuse to pack one. -->
+  <Target Name="_RequireEspeakNative" BeforeTargets="GenerateNuspec">
+    <Error Condition="!Exists('native\ios\espeak-ng.xcframework\Info.plist') Or !Exists('native\espeak-ng-data\phontab')"
+           Text="eSpeak NG is not built. Run native-build/build-espeak.sh first (it needs the third_party/espeak-ng submodule)." />
+  </Target>
+
+</Project>
