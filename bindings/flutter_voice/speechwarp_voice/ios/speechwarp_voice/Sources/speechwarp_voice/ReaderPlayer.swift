@@ -17,6 +17,8 @@ final class ReaderPlayer: @unchecked Sendable {
     private var seekFrame: Int64 = 0 // the reader's frame at the last seek
     private var playing = false
     private var finished = false
+    private var ended = false // the reader has run dry; finished once the output has played what it was given
+    private var endSeen: Date?
     private var closed = false
     private var changed = true
 
@@ -57,23 +59,34 @@ final class ReaderPlayer: @unchecked Sendable {
     private func render(into samples: UnsafeMutableBufferPointer<Float>) -> Int {
         lock.lock()
         defer { lock.unlock() }
-        guard playing, !closed else { return 0 }
+        guard playing, !ended, !closed else { return 0 }
         let frames = reader.read(into: samples)
         rendered += Int64(frames)
-        if frames == 0 && reader.isFinished {
-            finished = true
-            playing = false
-            changed = true
-        }
+        if frames == 0 && reader.isFinished { ended = true }
         return frames
     }
 
     var isPlaying: Bool { lock.locked { playing } }
 
     /// True once after anything that the position should report has changed.
-    /// Called on the main thread, which also stops the engine once everything has been heard.
+    /// Called on the main thread (repeatedly while playing), which also finishes once the reader has run dry and
+    /// the output has had time to play the last of it, and then stops the engine.
     func takeChanged() -> Bool {
+        let session = AVAudioSession.sharedInstance()
+        let latency = session.outputLatency + session.ioBufferDuration
         let (was, done): (Bool, Bool) = lock.locked {
+            if playing && ended {
+                if let seen = endSeen {
+                    if Date().timeIntervalSince(seen) >= latency {
+                        endSeen = nil
+                        finished = true
+                        playing = false
+                        changed = true
+                    }
+                } else {
+                    endSeen = Date()
+                }
+            }
             let was = changed
             changed = false
             return (was, finished)
@@ -82,7 +95,8 @@ final class ReaderPlayer: @unchecked Sendable {
         return was
     }
 
-    func play() {
+    /// Throws when the audio engine cannot start (another app holds the audio, no output).
+    func play() throws {
         let restart: Bool = lock.locked { finished }
         if restart { seek(toCharacter: 0) }
         let session = AVAudioSession.sharedInstance()
@@ -96,7 +110,11 @@ final class ReaderPlayer: @unchecked Sendable {
             do {
                 try engine.start()
             } catch {
-                lock.locked { playing = false }
+                lock.locked {
+                    playing = false
+                    changed = true
+                }
+                throw error
             }
         }
     }
@@ -114,6 +132,8 @@ final class ReaderPlayer: @unchecked Sendable {
             seekFrame = reader.seek(toCharacter: character)
             rendered = 0
             finished = false
+            ended = false
+            endSeen = nil
             changed = true
         }
     }

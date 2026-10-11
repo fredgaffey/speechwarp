@@ -66,7 +66,13 @@ public final class SpeechwarpVoicePlugin: NSObject, FlutterPlugin, FlutterStream
                 return result(FlutterError(code: "state", message: "No reader \(id): it has been disposed", details: nil))
             }
             switch call.method {
-            case "play": reader.play()
+            case "play":
+                do {
+                    try reader.play()
+                } catch {
+                    return result(FlutterError(code: "voice", message: "Could not start audio: \(Self.describe(error))",
+                                               details: nil))
+                }
             case "pause": reader.pause()
             case "seek": reader.seek(toCharacter: args["character"] as? Int ?? 0)
             case "setSpeed": reader.setSpeed((args["speed"] as? NSNumber)?.floatValue ?? 1)
