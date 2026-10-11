@@ -44,6 +44,12 @@ node -e '
   fs.writeFileSync(file, JSON.stringify(lock, null, 2) + "\n");
 ' "$new"
 
+# The React Native voice engines name react-native-speechwarp-voice of the same version as a peer, which Yarn records
+# in the workspace's lock file; `yarn install --immutable` (CI, the release) refuses a lock file that disagrees.
+sed -i.bak "s/^    react-native-speechwarp-voice: $escaped\$/    react-native-speechwarp-voice: $new/" \
+  bindings/react-native-voice/yarn.lock
+rm bindings/react-native-voice/yarn.lock.bak
+
 # Changelogs: an "Unreleased" section becomes this release; otherwise a heading is added to fill in. pub.dev
 # shows the Flutter ones, so each must have an entry for every version.
 for log in CHANGELOG.md bindings/flutter/CHANGELOG.md bindings/flutter_voice/*/CHANGELOG.md; do

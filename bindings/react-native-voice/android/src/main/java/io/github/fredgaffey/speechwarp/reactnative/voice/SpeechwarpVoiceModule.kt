@@ -100,19 +100,26 @@ class SpeechwarpVoiceModule(reactContext: ReactApplicationContext) : NativeSpeec
                         locale = options.string("language")?.let { Locale.forLanguageTag(it) },
                     ),
                 )
-                options.number("speed")?.let { reader.speed = it.toFloat() }
                 val handle = nextHandle.getAndIncrement()
                 val interval = ((options.number("positionInterval") ?: 0.1) * 1000).toLong().coerceAtLeast(16)
-                val player = ReaderPlayer(
-                    reader, interval,
-                    onState = { emitOnState(stateMap(handle, it)) },
-                    onError = { error ->
-                        emitOnError(Arguments.createMap().apply {
-                            putInt("reader", handle)
-                            putString("message", error.message ?: error.toString())
-                        })
-                    },
-                )
+                // The reader has a thread and a voice of its own: let them go if the player cannot be made (a speed
+                // for a reader that does not speed up, no AudioTrack).
+                val player = try {
+                    options.number("speed")?.let { reader.speed = it.toFloat() }
+                    ReaderPlayer(
+                        reader, interval,
+                        onState = { emitOnState(stateMap(handle, it)) },
+                        onError = { error ->
+                            emitOnError(Arguments.createMap().apply {
+                                putInt("reader", handle)
+                                putString("message", error.message ?: error.toString())
+                            })
+                        },
+                    )
+                } catch (e: Throwable) {
+                    reader.close()
+                    throw e
+                }
                 players[handle] = player
                 aheadToDiskFlags[handle] = aheadToDisk
                 promise.resolve(Arguments.createMap().apply {

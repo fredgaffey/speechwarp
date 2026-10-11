@@ -99,8 +99,8 @@ From Maven Central, once a release has been published:
 implementation("io.github.fredgaffey:speechwarp-android:0.3.7")
 ```
 
-`speechwarp-voice` is published from the release after 0.3.7 and brings `speechwarp-android` with it, as do
-`speechwarp-voice-kokoro` and `speechwarp-voice-espeak` (GPL-3.0-or-later).
+`speechwarp-voice` is published, at the same version, from the first release that has it (see CHANGELOG.md), and
+brings `speechwarp-android` with it, as do `speechwarp-voice-kokoro` and `speechwarp-voice-espeak` (GPL-3.0-or-later).
 
 ## Building it here
 

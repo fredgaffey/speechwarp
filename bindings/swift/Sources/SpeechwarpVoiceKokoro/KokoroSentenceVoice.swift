@@ -137,9 +137,14 @@ public final class KokoroSentenceVoice: SentenceVoice, @unchecked Sendable {
     }
 
     /// `speed` as C# formats it with "0.###" in the invariant culture: at most three decimals, no trailing zeros, a
-    /// leading zero, a point.
+    /// leading zero, a point. Like C#, it takes the float's first 7 significant digits and rounds a half away from
+    /// zero (1.0625 is "1.063"), where printf alone would round it to even ("1.062") and the ids would differ.
     static func format(_ speed: Float) -> String {
-        var text = String(format: "%.3f", locale: Locale(identifier: "en_US_POSIX"), Double(speed))
+        let posix = Locale(identifier: "en_US_POSIX")
+        var digits = Decimal(string: String(format: "%.6e", locale: posix, Double(speed)), locale: posix) ?? Decimal(Double(speed))
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &digits, 3, .plain)
+        var text = String(format: "%.3f", locale: posix, NSDecimalNumber(decimal: rounded).doubleValue)
         while text.hasSuffix("0") { text.removeLast() }
         if text.hasSuffix(".") { text.removeLast() }
         return text == "-0" ? "0" : text

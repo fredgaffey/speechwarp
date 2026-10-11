@@ -333,6 +333,10 @@ final class KokoroEngineTests: XCTestCase {
         XCTAssertEqual(KokoroSentenceVoice.format(0.5), "0.5")
         XCTAssertEqual(KokoroSentenceVoice.format(2), "2")
         XCTAssertEqual(KokoroSentenceVoice.format(1.23456), "1.235")
+        // Rounded as C# rounds "0.###": a half up, from the float's first 7 digits.
+        XCTAssertEqual(KokoroSentenceVoice.format(1.0625), "1.063")
+        XCTAssertEqual(KokoroSentenceVoice.format(1.0005), "1.001")
+        XCTAssertEqual(KokoroSentenceVoice.format(0.85), "0.85")
     }
 
     func testAcceleratorIsTriedFirst() throws {

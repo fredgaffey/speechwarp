@@ -3,10 +3,9 @@ package io.github.fredgaffey.speechwarp.voice.kokoro
 import io.github.fredgaffey.speechwarp.voice.Phonemizer
 import io.github.fredgaffey.speechwarp.voice.SentenceVoice
 import java.io.File
+import java.math.BigDecimal
+import java.math.MathContext
 import java.math.RoundingMode
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
-import java.util.Locale
 
 /**
  * A Kokoro voice as a [SentenceVoice], for a live reader and a voice cache: id "kokoro:NAME", 24 kHz, and kept on
@@ -92,10 +91,13 @@ class KokoroSentenceVoice private constructor(
             return voice
         }
 
-        /** Up to three decimals, never a comma, as the C# package writes it: 1.2, 0.85, 1.125. */
+        /**
+         * Up to three decimals, never a comma, as the C# package writes it ("0.###"): 1.2, 0.85, 1.125. Like C#, it
+         * takes the float's first 7 significant digits and then rounds a half up (1.0005f, stored as 1.00049996..., is
+         * "1.001"), so that the ids, and so the cache folders, agree.
+         */
         fun formatSpeed(speed: Float): String =
-            DecimalFormat("0.###", DecimalFormatSymbols.getInstance(Locale.ROOT))
-                .apply { roundingMode = RoundingMode.HALF_UP }
-                .format(speed.toDouble())
+            BigDecimal(speed.toDouble()).round(MathContext(7, RoundingMode.HALF_EVEN))
+                .setScale(3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
     }
 }

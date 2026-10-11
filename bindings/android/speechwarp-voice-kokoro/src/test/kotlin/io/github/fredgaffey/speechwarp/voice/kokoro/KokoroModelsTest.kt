@@ -102,6 +102,10 @@ class KokoroModelsTest {
             assertEquals("kokoro:bf_emma/0.85", KokoroSentenceVoice(directory, "bf_emma", nothing, speed = 0.85f).id)
             assertEquals("kokoro:bf_emma/1.125", KokoroSentenceVoice(directory, "bf_emma", nothing, speed = 1.125f).id)
             assertEquals("kokoro:bf_emma/2", KokoroSentenceVoice(directory, "bf_emma", nothing, speed = 2f).id)
+            // Rounded as C# rounds "0.###": a half up, from the float's first 7 digits.
+            assertEquals("kokoro:bf_emma/1.063", KokoroSentenceVoice(directory, "bf_emma", nothing, speed = 1.0625f).id)
+            assertEquals("kokoro:bf_emma/1.001", KokoroSentenceVoice(directory, "bf_emma", nothing, speed = 1.0005f).id)
+            assertEquals("kokoro:bf_emma/1.235", KokoroSentenceVoice(directory, "bf_emma", nothing, speed = 1.23456f).id)
         } finally {
             Locale.setDefault(default)
         }
