@@ -1,11 +1,12 @@
-#if canImport(AVFoundation) && canImport(NaturalLanguage)
+#if canImport(AVFoundation) && canImport(NaturalLanguage) && canImport(CryptoKit)
 import AVFoundation
 import Foundation
 import NaturalLanguage
 import Speechwarp
 
 /// A text read aloud by a system voice and sped up by speechwarp, rendered sentence by sentence a little ahead
-/// of playback.
+/// of playback. A convenience over `VoicedText` with an `AppleSentenceVoice`; use `VoicedText` itself for other
+/// engines, changing voice, a cache or seeking by time.
 ///
 /// ```swift
 /// let voice = SpeechVoice.eloquence(language: "en-US").first { $0.name == "Reed" }!
@@ -18,9 +19,9 @@ import Speechwarp
 /// let at = book.characterPosition                  // UTF-16 offset into the text
 /// ```
 ///
-/// Rendering runs on the main thread's run loop (where the system delivers speech); everything else is safe to
-/// call from any thread. `read` never waits: if the next sentence is not rendered yet it returns what there is,
-/// and `isBuffering` says so.
+/// Rendering runs on the main thread's run loop (where the system delivers speech), waited for on the reader's
+/// own thread; everything else is safe to call from any thread. `read` never waits: if the next sentence is not
+/// rendered yet it returns what there is, and `isBuffering` says so.
 public final class SpokenText: @unchecked Sendable {
     /// A sentence: its range in the text, in UTF-16 offsets (as `NSString` and most UI text APIs count).
     public struct Sentence: Equatable, Sendable {
@@ -28,202 +29,84 @@ public final class SpokenText: @unchecked Sendable {
         public let text: String
     }
 
-    public let text: String
+    public var text: String { reader.text }
     public let voice: SpeechVoice
-    public let sentences: [Sentence]
+    public var sentences: [Sentence] { reader.sentences }
     /// The sample rate of what `read` returns. Mono.
-    public let sampleRate: Int
+    public var sampleRate: Int { reader.sampleRate }
+    /// The reader doing the work, for what this class does not offer (seeking by time, say).
+    public let reader: VoicedText
+
+    private let lock = NSLock()
+    private var rate: Float
 
     /// The system rate the voice speaks at (see `SpeechRate`). Applies to sentences rendered afterwards.
     public var voiceRate: Float {
         get { lock.locked { rate } }
-        set { lock.locked { rate = newValue; cache.removeAll(); rendered = [:] }; scheduleRendering() }
+        set {
+            lock.locked {
+                rate = newValue
+                if let next = try? AppleSentenceVoice(voice: voice, rate: newValue) { reader.setVoice(next) }
+            }
+        }
     }
 
     /// speechwarp's speed on top of the voice's own rate: 2 plays twice as fast again.
     public var speed: Float {
-        get { lock.locked { stream.speed } }
-        set { lock.locked { stream.speed = newValue }; scheduleRendering() }
+        get { reader.speed }
+        set { reader.speed = newValue }
     }
 
     /// Seconds of listening to keep rendered ahead of what is being heard. Default 30.
     public var lookahead: TimeInterval {
-        get { lock.locked { ahead } }
-        set { lock.locked { ahead = max(1, newValue) }; scheduleRendering() }
+        get { reader.lookahead }
+        set { reader.lookahead = newValue }
     }
 
     /// The UTF-16 offset in the text of what is being heard now (approximate within a sentence).
-    public var characterPosition: Int { lock.locked { position() } }
+    public var characterPosition: Int { reader.characterPosition }
 
     /// The sentence being heard now.
-    public var sentenceIndex: Int { lock.locked { sentenceAt(position()) } }
+    public var sentenceIndex: Int { reader.sentenceIndex }
 
     /// The last `read` returned less than asked because the next sentence was still being rendered.
-    public var isBuffering: Bool { lock.locked { buffering } }
+    public var isBuffering: Bool { reader.isWaiting }
 
     /// Everything has been read.
-    public var isFinished: Bool { lock.locked { flushed && stream.framesAvailable == 0 } }
+    public var isFinished: Bool { reader.isFinished }
 
     /// The most recent rendering failure, if any. A sentence that fails is skipped.
-    public var lastError: Error? { lock.locked { failure } }
-
-    private let lock = NSLock()
-    private let renderer: SpeechRenderer
-    private let stream: SpeechwarpStream
-    private var rate: Float
-    private var ahead: TimeInterval = 30
-    private var cache: [Int: [Float]] = [:]
-    private var rendered: [Int: Bool] = [:] // false while rendering
-    private var feeding = 0 // the sentence being written into the stream
-    private var fed = 0 // frames of it written
-    private var segments: [(inputStart: Int64, sentence: Int, frames: Int)] = []
-    private var written: Int64 = 0 // frames written into the stream since the last seek
-    private var flushed = false
-    private var buffering = false
-    private var failure: Error?
-    private var renderingNow = false
+    public var lastError: Error? { reader.lastError }
 
     /// Splits `text` into sentences and starts rendering the first ones. `voiceRate` is the system rate (see
     /// `SpeechRate`); `speed` multiplies it.
     public init(_ text: String, voice: SpeechVoice, voiceRate: Float = SpeechRate.normal) throws {
-        self.text = text
         self.voice = voice
-        renderer = try SpeechRenderer(voice: voice)
-        sentences = Self.split(text)
         rate = voiceRate
-        let settings = AVSpeechSynthesisVoice(identifier: voice.identifier)?.audioFileSettings
-        sampleRate = (settings?[AVSampleRateKey] as? NSNumber)?.intValue ?? 22050
-        stream = try SpeechwarpStream(sampleRate: sampleRate, channels: 1)
-        scheduleRendering()
+        let first = try AppleSentenceVoice(voice: voice, rate: voiceRate)
+        reader = try VoicedText(text, voice: first,
+                                options: VoicedText.Options(sampleRate: first.sampleRate, lookahead: 30))
+    }
+
+    deinit {
+        reader.close()
     }
 
     /// Changes the speechwarp stream's other settings (nonlinear amount, heard pause, floor blend, rhythm ...)
     /// safely. Do not keep the stream.
     public func configure(_ body: (SpeechwarpStream) -> Void) {
-        lock.locked { body(stream) }
+        reader.configure(body)
     }
 
     /// Returns up to `maxFrames` mono samples to play next. Never waits.
     public func read(maxFrames: Int) -> [Float] {
-        let out: [Float] = lock.locked {
-            feed(until: maxFrames)
-            let samples = stream.read(maxFrames: maxFrames)
-            buffering = samples.count < maxFrames && !flushed
-            return samples
-        }
-        scheduleRendering()
-        return out
+        reader.read(maxFrames: maxFrames)
     }
 
     /// Continues from the start of the sentence containing UTF-16 offset `offset`.
     public func seek(toCharacter offset: Int) {
-        lock.locked {
-            feeding = sentenceAt(offset)
-            fed = 0
-            stream.reset()
-            segments = []
-            written = 0
-            flushed = false
-        }
-        scheduleRendering()
+        reader.seek(toCharacter: offset)
     }
-
-    // MARK: Feeding the stream (called with the lock held)
-
-    private func feed(until wanted: Int) {
-        while stream.framesAvailable < wanted && !flushed {
-            if feeding >= sentences.count {
-                try? stream.flush()
-                flushed = true
-                return
-            }
-            if rendered[feeding] == true, cache[feeding] == nil {
-                feeding += 1 // failed or empty: skip it
-                fed = 0
-                continue
-            }
-            guard let audio = cache[feeding] else { return } // not rendered yet
-            let take = min(4096, audio.count - fed)
-            if take > 0 {
-                audio[fed..<fed + take].withUnsafeBufferPointer { try? stream.write($0) }
-                if segments.last?.sentence == feeding {
-                    segments[segments.count - 1].frames += take
-                } else {
-                    segments.append((written, feeding, take))
-                }
-                written += Int64(take)
-                fed += take
-            }
-            if fed >= audio.count {
-                feeding += 1
-                fed = 0
-                cache = cache.filter { $0.key >= feeding - 2 } // keep a little behind for short seeks
-                rendered = rendered.filter { $0.key >= feeding - 2 }
-            }
-        }
-    }
-
-    private func position() -> Int {
-        let heard = stream.position
-        guard let segment = segments.last(where: { $0.inputStart <= heard }) else {
-            return sentences.indices.contains(feeding) ? sentences[feeding].range.location : text.utf16.count
-        }
-        let range = sentences[segment.sentence].range
-        let total = max(1, cache[segment.sentence]?.count ?? segment.frames)
-        let into = Double(heard - segment.inputStart) / Double(total)
-        return range.location + min(range.length, Int(into * Double(range.length)))
-    }
-
-    private func sentenceAt(_ offset: Int) -> Int {
-        sentences.lastIndex { $0.range.location <= offset } ?? 0
-    }
-
-    // MARK: Rendering ahead
-
-    /// Renders the next sentence that is missing within the lookahead, one at a time, until the lookahead is
-    /// covered.
-    private func scheduleRendering() {
-        let next: (index: Int, text: String, rate: Float)? = lock.locked {
-            guard !renderingNow else { return nil }
-            var seconds = 0.0
-            var index = feeding
-            let listeningSpeed = Double(max(stream.speed, 0.05))
-            while index < sentences.count && seconds < ahead {
-                if let audio = cache[index] {
-                    seconds += Double(audio.count) / Double(sampleRate) / listeningSpeed
-                } else if rendered[index] == nil {
-                    rendered[index] = false
-                    renderingNow = true
-                    return (index, sentences[index].text, rate)
-                }
-                index += 1
-            }
-            return nil
-        }
-        guard let next else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                let speech = try await self.renderer.render(next.text, rate: next.rate)
-                let samples = speech.sampleRate == self.sampleRate
-                    ? speech.samples : Self.resample(speech.samples, from: speech.sampleRate, to: self.sampleRate)
-                self.lock.locked {
-                    if self.rate == next.rate && next.index >= self.feeding - 2 {
-                        if !samples.isEmpty { self.cache[next.index] = samples }
-                        self.rendered[next.index] = true
-                    } else {
-                        self.rendered[next.index] = nil // the rate changed meanwhile, or it is behind us
-                    }
-                }
-            } catch {
-                self.lock.locked { self.failure = error; self.rendered[next.index] = true }
-            }
-            self.lock.locked { self.renderingNow = false }
-            self.scheduleRendering()
-        }
-    }
-
-    // MARK: Helpers
 
     /// Sentences by the system's tokenizer; any longer than 400 characters are cut at the last comma, semicolon
     /// or space before that, so that rendering never stalls on one enormous sentence.
@@ -249,25 +132,6 @@ public final class SpokenText: @unchecked Sendable {
             return true
         }
         return result
-    }
-
-    /// Linear interpolation, for a voice whose audio is not at the rate it declared.
-    static func resample(_ samples: [Float], from source: Int, to target: Int) -> [Float] {
-        guard source != target, !samples.isEmpty else { return samples }
-        let count = Int(Double(samples.count) * Double(target) / Double(source))
-        return (0..<count).map { i in
-            let x = Double(i) * Double(source) / Double(target)
-            let j = Int(x), f = Float(x - Double(j))
-            return j + 1 < samples.count ? samples[j] * (1 - f) + samples[j + 1] * f : samples[samples.count - 1]
-        }
-    }
-}
-
-private extension NSLock {
-    func locked<T>(_ body: () throws -> T) rethrows -> T {
-        lock()
-        defer { unlock() }
-        return try body()
     }
 }
 #endif
